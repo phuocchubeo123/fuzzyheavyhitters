@@ -1,6 +1,5 @@
 // extern crate cpuprofiler;
 
-pub mod collect;
 pub mod configs;
 pub mod data_structures;
 pub mod fss;
@@ -13,7 +12,6 @@ pub mod data_toolkit;
 pub mod aes;
 pub mod channel;
 pub mod okvs_f2k;
-pub mod rpc;
 pub mod synthetic_data;
 pub mod util;
 
@@ -22,7 +20,6 @@ extern crate lazy_static;
 
 pub use crate::data_structures::field::Dummy;
 pub use crate::data_structures::field::FieldElm;
-pub use crate::rpc::CollectorClient;
 use scuttlebutt::Block;
 
 // Additive group, such as (Z_n, +)
@@ -126,12 +123,6 @@ pub fn bits_to_string(bits: &[bool]) -> String {
     }
 
     out
-}
-
-fn all_bit_vectors(dim: usize) -> Vec<Vec<bool>> {
-    (0..1 << dim)
-        .map(|i| (0..dim).map(|j| (i >> j) & 1 == 1).collect())
-        .collect()
 }
 
 pub fn add_bitstrings(alpha: &[bool], beta: &[bool]) -> Vec<bool> {
