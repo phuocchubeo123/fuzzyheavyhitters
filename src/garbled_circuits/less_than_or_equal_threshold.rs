@@ -1,4 +1,5 @@
 use crate::data_structures::mod2k::{get_bit_width_from_modint, Mod2k};
+use rand::RngExt;
 use crate::util::u128_to_bits;
 
 use fancy_garbling::{
@@ -7,7 +8,6 @@ use fancy_garbling::{
     FancyReveal,
 };
 use ocelot::{ot::AlszReceiver as OtReceiver, ot::AlszSender as OtSender};
-use rand::Rng;
 use scuttlebutt::{AbstractChannel, AesRng};
 use std::fmt::Debug;
 

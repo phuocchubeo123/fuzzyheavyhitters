@@ -1,7 +1,5 @@
-use csv::{Reader, Writer};
+use csv::Reader;
 use std::error::Error;
-use std::fs::File;
-use std::io::BufWriter;
 use std::path::Path;
 
 // Austin bounding box
@@ -80,47 +78,23 @@ pub fn csv_to_bitvecs<P: AsRef<Path>>(path: P) -> Result<Vec<Vec<Vec<bool>>>, Bo
         .collect()
 }
 
-pub fn save_heavy_hitters(
-    heavy_hitters: Vec<Vec<bool>>,
-    output_path: &str,
-) -> Result<(), Box<dyn Error>> {
-    let file = File::options()
-        .append(true)
-        .create(true)
-        .open(output_path)?;
+pub fn read_csv_and_convert<P: AsRef<Path>>(path: P) -> Result<Vec<Vec<u128>>, Box<dyn Error>> {
+    let mut rdr = Reader::from_path(path)?;
 
-    let mut wtr = Writer::from_writer(BufWriter::new(file));
+    rdr.records()
+        .map(|record| {
+            let record = record?;
+            let start_lon = record[15].parse::<f64>()?;
+            let start_lat = record[16].parse::<f64>()?;
+            // let end_lat = record[6].parse::<f64>()?;
+            // let end_lon = record[7].parse::<f64>()?;
 
-    if std::fs::metadata(output_path)?.len() == 0 {
-        wtr.write_record(&["latitude", "longitude"])?;
-    }
-    let lat_bits = heavy_hitters[0].clone();
-    let lon_bits = heavy_hitters[1].clone();
-    let lat_grid = from_bitvec(lat_bits.as_slice());
-    let lon_grid = from_bitvec(lon_bits.as_slice());
-    let (lat, lon) = grid_to_geo(lat_grid, lon_grid);
+            // Convert to grid coordinates (same as csv_to_bitvecs function)
+            let (start_lat_grid, start_lon_grid) = geo_to_grid(start_lat, start_lon);
+            // let (end_lat_grid, end_lon_grid) = geo_to_grid(end_lat, end_lon);
 
-    wtr.write_record(&[lat.to_string(), lon.to_string()])?;
-
-    wtr.flush()?;
-    Ok(())
-}
-
-#[test]
-fn test_grid_conversion() {
-    let (lat, lon) = (30.2672, -97.7431);
-    let (lat_grid, lon_grid) = geo_to_grid(lat, lon);
-    let (lat_back, lon_back) = grid_to_geo(lat_grid, lon_grid);
-
-    let tolerance = 1.0 / DECIMAL_SCALE as f64;
-    assert!((lat - lat_back).abs() < tolerance);
-    assert!((lon - lon_back).abs() < tolerance);
-    println!(
-        "Test passed! Grid coordinates: ({}, {})",
-        lat_grid, lon_grid
-    );
-
-    let bits = to_bitvec(lat_grid, LAT_BITS);
-    let reconstructed = from_bitvec(&bits);
-    assert_eq!(lat_grid, reconstructed);
+            // Convert to u128 and create point as [lat, lon]
+            Ok(vec![start_lat_grid as u128, start_lon_grid as u128])
+        })
+        .collect()
 }

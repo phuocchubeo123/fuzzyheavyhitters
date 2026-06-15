@@ -6,6 +6,9 @@ use aes::cipher::generic_array::typenum;
 use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
 use aes::Aes128;
 
+use core::convert::Infallible;
+use rand_core::TryRng;
+
 // AES key size in bytes. We always use AES-128,
 // which has 16-byte keys.
 pub const AES_KEY_SIZE: usize = 16;
@@ -132,16 +135,21 @@ impl FixedKeyPrgStream {
     }
 }
 
-impl rand::RngCore for FixedKeyPrgStream {
-    fn next_u32(&mut self) -> u32 {
-        rand_core::impls::next_u32_via_fill(self)
+impl TryRng for FixedKeyPrgStream {
+    type Error = Infallible;
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        let mut buf = [0u8; 4];
+        self.try_fill_bytes(&mut buf)?;
+        Ok(u32::from_le_bytes(buf))
     }
 
-    fn next_u64(&mut self) -> u64 {
-        rand_core::impls::next_u64_via_fill(self)
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        let mut buf = [0u8; 8];
+        self.try_fill_bytes(&mut buf)?;
+        Ok(u64::from_le_bytes(buf))
     }
 
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
         let mut dest_ptr = 0;
         while dest_ptr < dest.len() {
             if self.have < dest.len() - dest_ptr {
@@ -161,5 +169,6 @@ impl rand::RngCore for FixedKeyPrgStream {
             self.have -= to_copy;
             dest_ptr += to_copy;
         }
+        Ok(())
     }
 }

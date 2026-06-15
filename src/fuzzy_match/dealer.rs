@@ -13,7 +13,7 @@ use crate::{
     fss::{dpf::DpfKey, ldcf::LdcfKey, rdcf::RdcfKey},
     util::{bits_to_u8s, u128_to_bits_msb, u8s_to_bits},
 };
-use rand::Rng;
+use rand::RngExt;
 use rayon::prelude::*;
 use scuttlebutt::AbstractChannel;
 use std::convert::TryInto;

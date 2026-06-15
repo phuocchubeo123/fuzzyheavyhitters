@@ -1,32 +1,10 @@
 use clap::Parser;
-use csv::Reader;
-use mosaic::sample_driving_data::geo_to_grid;
+use mosaic::data_toolkit::read_csv_and_convert;
 use serde_json;
 use std::error::Error;
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::Path;
-
-fn read_csv_and_convert<P: AsRef<Path>>(path: P) -> Result<Vec<Vec<u128>>, Box<dyn Error>> {
-    let mut rdr = Reader::from_path(path)?;
-
-    rdr.records()
-        .map(|record| {
-            let record = record?;
-            let start_lon = record[15].parse::<f64>()?;
-            let start_lat = record[16].parse::<f64>()?;
-            // let end_lat = record[6].parse::<f64>()?;
-            // let end_lon = record[7].parse::<f64>()?;
-
-            // Convert to grid coordinates (same as csv_to_bitvecs function)
-            let (start_lat_grid, start_lon_grid) = geo_to_grid(start_lat, start_lon);
-            // let (end_lat_grid, end_lon_grid) = geo_to_grid(end_lat, end_lon);
-
-            // Convert to u128 and create point as [lat, lon]
-            Ok(vec![start_lat_grid as u128, start_lon_grid as u128])
-        })
-        .collect()
-}
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]

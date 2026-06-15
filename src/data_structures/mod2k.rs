@@ -251,8 +251,8 @@ impl Group for Mod2k {
 
 // Implement FromRng trait requirement for Share
 impl crate::data_structures::prg::FromRng for Mod2k {
-    fn from_rng(&mut self, stream: &mut (impl rand::Rng + rand_core::RngCore)) {
-        self.val = stream.random::<u128>() & self.modulus_mask;
+    fn from_rng(&mut self, _stream: &mut impl rand_core::Rng) {
+        self.val = rand::random::<u128>() & self.modulus_mask;
     }
 
     fn randomize(&mut self) {

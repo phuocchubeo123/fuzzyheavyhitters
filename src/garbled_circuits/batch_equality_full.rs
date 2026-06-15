@@ -1,4 +1,5 @@
 use crate::channel::CommTrackingChannel;
+use rand::RngExt;
 use fancy_garbling::{
     twopac::semihonest::{Evaluator, Garbler},
     AllWire, BinaryBundle, BinaryGadgets, Fancy, FancyArithmetic, FancyBinary, FancyInput,
@@ -7,7 +8,6 @@ use fancy_garbling::{
 use ocelot::{ot::AlszReceiver as OtReceiver, ot::AlszSender as OtSender};
 use scuttlebutt::{AbstractChannel, AesRng};
 
-use rand::Rng;
 use std::fmt::Debug;
 
 /// A structure that contains both the garbler and the evaluators

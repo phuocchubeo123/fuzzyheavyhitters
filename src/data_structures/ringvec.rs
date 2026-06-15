@@ -1,7 +1,7 @@
 use std::ops::{Add, Index, IndexMut, Mul, Sub};
+use rand::RngExt;
 
 use anyhow::{ensure, Result};
-use rand::Rng;
 
 /// Runtime-length ring vector stored on the heap.
 #[derive(Clone, Debug, PartialEq)]

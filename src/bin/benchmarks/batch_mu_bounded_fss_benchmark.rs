@@ -1,4 +1,5 @@
 use clap::Parser;
+use rand::RngExt;
 use mosaic::{
     channel::{connect_to, listen_to},
     configs::property_test_config::BenchmarkConfig,
@@ -10,7 +11,6 @@ use mosaic::{
         protocol::request_dealer_check,
     },
 };
-use rand::Rng;
 use scuttlebutt::AbstractChannel;
 use std::time::Instant;
 

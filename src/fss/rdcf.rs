@@ -1,12 +1,12 @@
 use crate::aes::{FixedKeyPrgStream, AES_BLOCK_SIZE};
+use rand::RngExt;
+use rand::Rng;
 use crate::bytes_to_u128;
 use crate::data_structures::mod2k::Mod2k;
 use crate::data_structures::ringvec::RingVec;
 use crate::util::{and_bit, xor};
 
 use anyhow::{anyhow, ensure, Context, Result};
-use rand::Rng;
-use rand_core::RngCore;
 use std::cell::RefCell;
 use std::convert::TryInto;
 

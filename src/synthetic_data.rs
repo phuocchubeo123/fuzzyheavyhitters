@@ -4,7 +4,8 @@
 //! It creates multiple clusters of varying sizes, where each cluster contains
 //! points that are close to each other geographically.
 
-use rand::Rng;
+use rand_core::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for synthetic data generation

@@ -123,7 +123,7 @@ fn run_server(config_path: &str, is_server1: bool, num_threads: usize) -> Result
 
     let mut total_sent = 0;
     let mut total_received = 0;
-    for (i, channel) in other_server_channels.iter().enumerate() {
+    for (_, channel) in other_server_channels.iter().enumerate() {
         let (sent, received) = channel.get_communication_stats();
         total_sent += sent;
         total_received += received;

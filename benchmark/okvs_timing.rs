@@ -1,5 +1,5 @@
 use mosaic::okvs_f2k::RbOkvsF2k;
-use rand::Rng;
+use rand::RngExt;
 use std::time::Instant;
 
 fn main() {

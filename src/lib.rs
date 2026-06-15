@@ -8,12 +8,12 @@ pub mod fuzzy_match;
 pub mod garbled_circuits;
 pub mod naive;
 pub mod randomness;
+pub mod data_toolkit;
 
 pub mod aes;
 pub mod channel;
 pub mod okvs_f2k;
 pub mod rpc;
-pub mod sample_driving_data;
 pub mod synthetic_data;
 pub mod util;
 

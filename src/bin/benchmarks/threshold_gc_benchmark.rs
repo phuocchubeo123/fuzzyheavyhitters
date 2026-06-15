@@ -1,4 +1,5 @@
 use clap::Parser;
+use rand::RngExt;
 use mosaic::{
     channel::{connect_to, listen_to},
     configs::property_test_config::BenchmarkConfig,
@@ -8,7 +9,6 @@ use mosaic::{
         threshold_phase_types::{ThresholdConfig, ThresholdMethod},
     },
 };
-use rand::Rng;
 use scuttlebutt::{AbstractChannel, AesRng};
 use std::time::Instant;
 

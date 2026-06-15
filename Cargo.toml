@@ -6,10 +6,10 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
-lazy_static = "1.4"
+lazy_static = "1.5.0"
 num-bigint = { version = "0.4.6", features = ["rand", "serde"] }
-rand = "0.9.1"
-rand_core = "0.9.3"
+rand = "0.10.1"
+rand_core = "0.10.1"
 rand_distr = "0.5.1"
 clap = "4.5.51"
 futures = { version = "0.3" }
@@ -113,17 +113,6 @@ path = "src/bin/benchmarks/threshold_gc_benchmark.rs"
 name = "tokio_vs_std"
 path = "src/bin/benchmarks/tokio_vs_std.rs"
 
-
-
-#### Poplar binaries ####
-
-[[bin]]
-name = "leader"
-path = "src/bin/poplar/leader.rs"
-
-[[bin]]
-name = "server"
-path = "src/bin/poplar/server.rs"
 
 
 #### Data Generation binaries ####

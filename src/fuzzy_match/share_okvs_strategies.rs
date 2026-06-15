@@ -1,6 +1,6 @@
 use crate::util::u128_to_bits_msb;
+use rand::RngExt;
 use blake3;
-use rand::Rng;
 use std::collections::HashSet;
 
 /// Trait for different key-value pair preparation strategies

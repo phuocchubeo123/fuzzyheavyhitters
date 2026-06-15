@@ -1,5 +1,5 @@
 use mosaic::aes::FixedKeyPrgStream;
-use rand_core::RngCore;
+use rand_core::Rng;
 use std::time::Instant;
 
 fn main() {

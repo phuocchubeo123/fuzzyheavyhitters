@@ -37,6 +37,10 @@ In Mosaic, the model we follow is:
 
 # Installation
 
+Dependencies:
+- Rust: this code has been tested with Rust 1.96.0 (ac68faa20 2026-05-25)
+
+
 # How to run
 
 To compile, set the Rust flag:

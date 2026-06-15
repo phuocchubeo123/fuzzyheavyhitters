@@ -1,4 +1,5 @@
 use crate::data_structures::mod2k::{get_bit_width_from_modint, Mod2k};
+use rand::RngExt;
 
 use fancy_garbling::{
     twopac::semihonest::{Evaluator, Garbler},
@@ -10,7 +11,6 @@ use scuttlebutt::{AbstractChannel, AesRng};
 
 use std::fmt::Debug;
 
-use rand::Rng;
 
 /// A structure that contains both the garbler and the evaluators
 /// wires. This structure simplifies the API of the garbled circuit.

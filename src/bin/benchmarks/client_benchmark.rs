@@ -2,7 +2,7 @@ use mosaic::{
     fuzzy_match::client::Client,
     fuzzy_match::share_phase_types::{DictionaryType, DistanceMetric, ShareConfig, ShareMethod},
 };
-use rand::Rng;
+use rand::RngExt;
 use std::time::Instant;
 
 fn main() {

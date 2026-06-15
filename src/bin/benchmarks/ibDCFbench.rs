@@ -1,9 +1,9 @@
 use csv::Writer;
+use rand::RngExt;
 use mosaic::{fss::ibdcf::IbDCFKey, string_to_bits};
 use std::time::Instant;
 
 use rand::distr::Alphanumeric;
-use rand::Rng;
 use rayon::prelude::*;
 use std::io;
 

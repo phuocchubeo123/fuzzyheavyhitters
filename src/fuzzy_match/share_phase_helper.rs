@@ -1,4 +1,5 @@
 use blake3;
+use rand::RngExt;
 
 use std::cmp::{max, min};
 
@@ -15,7 +16,6 @@ use crate::{
     okvs_f2k::RbOkvsF2k,
     util::u128_to_bits_msb,
 };
-use rand::Rng;
 
 use super::share_phase::{SharePhase, SharePhaseError};
 use super::share_phase_types::DistanceMetric;

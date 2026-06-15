@@ -1,6 +1,6 @@
 use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
 use aes::Aes128;
-use rand::Rng;
+use rand::RngExt;
 
 pub struct PRG {
     counter: u64,

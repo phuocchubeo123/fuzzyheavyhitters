@@ -3,12 +3,13 @@ use core::arch::x86_64::{
 };
 
 use aes::cipher::generic_array::typenum;
+use rand::RngExt;
 use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit, KeyIvInit, StreamCipher};
 use aes::Aes128;
 use ctr::Ctr128BE;
 
-use rand::Rng;
-use rand_core::RngCore;
+use core::convert::Infallible;
+use rand_core::TryRng;
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -43,7 +44,7 @@ pub struct PrgSeed {
 }
 
 pub trait FromRng {
-    fn from_rng(&mut self, stream: &mut (impl rand::Rng + rand_core::RngCore));
+    fn from_rng(&mut self, stream: &mut impl rand_core::Rng);
 
     fn randomize(&mut self) {
         self.from_rng(&mut rand::rng());
@@ -110,13 +111,13 @@ impl PrgSeed {
             // println!("PRG outputs bits {:?}", out.bits);
 
             if left {
-                s.fill_bytes(&mut out.seeds.0.key);
+                s.try_fill_bytes(&mut out.seeds.0.key).unwrap();
             } else {
                 s.skip_block();
             }
 
             if right {
-                s.fill_bytes(&mut out.seeds.1.key);
+                s.try_fill_bytes(&mut out.seeds.1.key).unwrap();
             } else {
                 s.skip_block();
             }
@@ -138,7 +139,7 @@ impl PrgSeed {
         FIXED_KEY_STREAM.with(|s_in| {
             let mut s = s_in.borrow_mut();
             s.set_key(&self.key);
-            s.fill_bytes(&mut out.seed.key);
+            s.try_fill_bytes(&mut out.seed.key).unwrap();
             unsafe {
                 let sp = s_in.as_ptr();
                 out.word.from_rng(&mut *sp);
@@ -162,21 +163,27 @@ impl PrgSeed {
     }
 }
 
-impl rand::RngCore for PrgStream {
-    fn next_u32(&mut self) -> u32 {
-        rand_core::impls::next_u32_via_fill(self)
+impl TryRng for PrgStream {
+    type Error = Infallible;
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        let mut buf = [0u8; 4];
+        self.try_fill_bytes(&mut buf)?;
+        Ok(u32::from_le_bytes(buf))
     }
 
-    fn next_u64(&mut self) -> u64 {
-        rand_core::impls::next_u64_via_fill(self)
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        let mut buf = [0u8; 8];
+        self.try_fill_bytes(&mut buf)?;
+        Ok(u64::from_le_bytes(buf))
     }
 
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
         for v in dest.iter() {
             debug_assert_eq!(*v, 0u8);
         }
 
         self.stream.apply_keystream(dest);
+        Ok(())
     }
 }
 
@@ -298,16 +305,21 @@ impl FixedKeyPrgStream {
     }
 }
 
-impl rand::RngCore for FixedKeyPrgStream {
-    fn next_u32(&mut self) -> u32 {
-        rand_core::impls::next_u32_via_fill(self)
+impl TryRng for FixedKeyPrgStream {
+    type Error = Infallible;
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        let mut buf = [0u8; 4];
+        self.try_fill_bytes(&mut buf)?;
+        Ok(u32::from_le_bytes(buf))
     }
 
-    fn next_u64(&mut self) -> u64 {
-        rand_core::impls::next_u64_via_fill(self)
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        let mut buf = [0u8; 8];
+        self.try_fill_bytes(&mut buf)?;
+        Ok(u64::from_le_bytes(buf))
     }
 
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
         let mut dest_ptr = 0;
         while dest_ptr < dest.len() {
             if self.buf_ptr == self.have {
@@ -326,6 +338,7 @@ impl rand::RngCore for FixedKeyPrgStream {
             self.buf_ptr += to_copy;
             dest_ptr += to_copy;
         }
+        Ok(())
     }
 }
 

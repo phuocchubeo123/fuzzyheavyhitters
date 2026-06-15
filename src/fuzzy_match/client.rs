@@ -9,8 +9,8 @@ use crate::{
     },
     randomness::prg::PRG,
 };
-use rand::Rng;
 use scuttlebutt::AbstractChannel;
+use rand::RngExt;
 use anyhow::{anyhow, ensure, Result};
 
 /// Client structure that handles client-side operations
@@ -58,6 +58,8 @@ impl Client {
         ensure!(
             client_points.len() == self.num_clients,
             "Number of client points does not match expected number of clients, expected {}, got {}",
+            self.num_clients,
+            client_points.len(),
         );
         if self.share_method() != ShareMethod::FSS && self.enable_sketch {
             return Err(anyhow!("Sketch generation is only supported with FSS share method"));

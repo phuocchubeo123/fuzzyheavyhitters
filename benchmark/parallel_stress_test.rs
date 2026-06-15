@@ -1,6 +1,6 @@
 use indicatif::{ProgressBar, ProgressStyle};
+use rand::RngExt;
 use mosaic::okvs_f2k::RbOkvsF2k;
-use rand::Rng;
 use rayon::prelude::*;
 use std::env;
 use std::sync::atomic::{AtomicUsize, Ordering};
