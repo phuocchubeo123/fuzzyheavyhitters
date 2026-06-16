@@ -7,6 +7,4 @@ pub mod distance;
 pub mod dpf;
 pub mod interval;
 pub mod ldcf;
-pub mod left_interval;
 pub mod rdcf;
-pub mod right_interval;
