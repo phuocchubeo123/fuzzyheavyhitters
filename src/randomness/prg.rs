@@ -1,7 +1,8 @@
-use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
+use aes::cipher::{Block, BlockCipherEncrypt, Key, KeyInit};
 use aes::Aes128;
 use rand::RngExt;
 
+#[derive(Clone)]
 pub struct PRG {
     counter: u64,
     aes: Aes128,
@@ -19,7 +20,9 @@ impl PRG {
         }
         PRG::apply_id_to_key(&mut key, id);
 
-        let aes = Aes128::new(GenericArray::from_slice(&key));
+        let mut aes_key = Key::<Aes128>::default();
+        aes_key.copy_from_slice(&key);
+        let aes = Aes128::new(&aes_key);
         PRG {
             counter: 0,
             aes,
@@ -47,49 +50,43 @@ impl PRG {
     pub fn reseed(&mut self, seed: &[u8; 16], id: u64) {
         self.key.copy_from_slice(seed);
         PRG::apply_id_to_key(&mut self.key, id);
-        self.aes = Aes128::new(GenericArray::from_slice(&self.key));
+        let mut aes_key = Key::<Aes128>::default();
+        aes_key.copy_from_slice(&self.key);
+        self.aes = Aes128::new(&aes_key);
         self.counter = 0;
     }
 
     pub fn random_16byte_block(&mut self, blocks: &mut [[u8; 16]]) {
-        // Create an array of AES blocks for encryption
-        let mut aes_blocks: Vec<_> = (0..blocks.len())
+        let mut aes_blocks: Vec<Block<Aes128>> = (0..blocks.len())
             .map(|_| {
-                let mut block = [0u8; 16];
+                let mut block = Block::<Aes128>::default();
                 block[8..].copy_from_slice(&self.counter.to_le_bytes());
-                self.counter += 1; // Increment counter for each block
-                GenericArray::clone_from_slice(&block)
+                self.counter += 1;
+                block
             })
             .collect();
-        // Encrypt all blocks in one call
         self.aes.encrypt_blocks(&mut aes_blocks);
 
-        // Copy the encrypted blocks back into the original `blocks` array
         for (i, encrypted) in aes_blocks.iter().enumerate() {
             blocks[i].copy_from_slice(encrypted);
         }
     }
 
     pub fn random_32byte_block(&mut self, blocks: &mut [[u8; 32]]) {
-        // Preallocate space for AES blocks (2 AES blocks per 32-byte block)
-        let mut aes_blocks: Vec<_> = vec![GenericArray::default(); blocks.len() * 2];
+        let mut aes_blocks: Vec<Block<Aes128>> = vec![Block::<Aes128>::default(); blocks.len() * 2];
 
         for (i, block) in blocks.iter_mut().enumerate() {
-            // Embed the counter in the last 8 bytes of the 32-byte block
             block[8..16].copy_from_slice(&self.counter.to_le_bytes());
             self.counter += 1;
             block[24..32].copy_from_slice(&self.counter.to_le_bytes());
             self.counter += 1;
 
-            // Write the two halves of the 32-byte block into the AES blocks vector
             aes_blocks[i * 2].copy_from_slice(&block[0..16]);
             aes_blocks[i * 2 + 1].copy_from_slice(&block[16..32]);
         }
 
-        // Encrypt all blocks in one batch
         self.aes.encrypt_blocks(&mut aes_blocks);
 
-        // Copy the encrypted halves back into their respective 32-byte blocks
         for (i, block) in blocks.iter_mut().enumerate() {
             block[0..16].copy_from_slice(&aes_blocks[i * 2]);
             block[16..32].copy_from_slice(&aes_blocks[i * 2 + 1]);
@@ -98,7 +95,7 @@ impl PRG {
 
     pub fn random_bool_array(&mut self, bits: &mut [bool]) {
         let mut blocks = vec![[0u8; 16]; (bits.len() + 127) / 128];
-        self.random_16byte_block(&mut blocks); // Use the AES-based random_block generator
+        self.random_16byte_block(&mut blocks);
 
         bits.iter_mut().enumerate().for_each(|(i, bit)| {
             let block_index = i / 128;
@@ -121,11 +118,8 @@ impl PRG {
     pub fn fill_bytes(&mut self, buffer: &mut [u8]) {
         let block_count = (buffer.len() + 15) / 16;
         let mut blocks = vec![[0u8; 16]; block_count];
-
-        // Generate random blocks using AES
         self.random_16byte_block(&mut blocks);
 
-        // Flatten blocks into the buffer
         for (i, byte) in buffer.iter_mut().enumerate() {
             let block_index = i / 16;
             let byte_index = i % 16;

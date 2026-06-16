@@ -1,4 +1,4 @@
-use mosaic::aes::FixedKeyPrgStream;
+use mosaic::randomness::aes::FixedKeyPrgStream;
 use rand_core::Rng;
 use std::time::Instant;
 

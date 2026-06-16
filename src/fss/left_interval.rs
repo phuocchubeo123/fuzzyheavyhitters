@@ -1,7 +1,7 @@
 // The interval in this file is different.
 // If a prefix is LESS THAN the prefix of beta, it will take the mid payload.
 
-use crate::aes::{FixedKeyPrgStream, AES_BLOCK_SIZE};
+use crate::randomness::aes::{FixedKeyPrgStream, AES_BLOCK_SIZE};
 use rand::RngExt;
 use rand::Rng;
 use crate::bytes_to_u128;

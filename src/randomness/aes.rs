@@ -1,43 +1,35 @@
 use core::arch::x86_64::{
-    __m128i, _mm_add_epi64, _mm_loadu_si128, _mm_set_epi64x, _mm_storeu_si128,
+    __m128i, _mm_add_epi64, _mm_set_epi64x, _mm_storeu_si128,
 };
 
-use aes::cipher::generic_array::typenum;
-use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
+use aes::cipher::{Block, BlockCipherEncrypt, Key, KeyInit};
 use aes::Aes128;
-
 use core::convert::Infallible;
 use rand_core::TryRng;
+use std::cell::RefCell;
 
-// AES key size in bytes. We always use AES-128,
-// which has 16-byte keys.
 pub const AES_KEY_SIZE: usize = 16;
-
-// AES block size in bytes. Always 16 bytes.
 pub const AES_BLOCK_SIZE: usize = 16;
 
-// XXX Todo try using 8-way parallelism
 pub struct FixedKeyPrgStream {
     aes: Aes128,
-    ctr_generic_array: GenericArray<GenericArray<u8, typenum::U16>, typenum::U101>,
-    buf_blocks: GenericArray<GenericArray<u8, typenum::U16>, typenum::U101>,
+    ctr_generic_array: Vec<Block<Aes128>>,
+    buf_blocks: Vec<Block<Aes128>>,
     count: usize,
     buf: [u8; 101 * AES_BLOCK_SIZE],
     buf_ptr: usize,
     have: usize,
 }
 
+thread_local!(static FIXED_KEY_STREAM: RefCell<FixedKeyPrgStream> = RefCell::new(FixedKeyPrgStream::new()));
+
 impl FixedKeyPrgStream {
     pub fn new() -> Self {
-        let key = GenericArray::from_slice(&[0; AES_KEY_SIZE]);
-        // Initialize ctr_array and ctr_generic_array with counters from 0 to 100
-        let mut ctr_array = [unsafe { std::mem::zeroed() }; 101];
-        let mut ctr_generic_array =
-            GenericArray::<GenericArray<u8, typenum::U16>, typenum::U101>::default();
+        let key = Key::<Aes128>::default();
+        let mut ctr_generic_array = vec![Block::<Aes128>::default(); 101];
         for i in 0..=100 {
             let mut ctr_bytes = [0u8; AES_BLOCK_SIZE];
             ctr_bytes[8..].copy_from_slice(&(i as u64).to_be_bytes());
-            ctr_array[i] = FixedKeyPrgStream::load(&ctr_bytes);
             ctr_generic_array[i].copy_from_slice(&ctr_bytes);
         }
         FixedKeyPrgStream {
@@ -55,7 +47,9 @@ impl FixedKeyPrgStream {
         for i in 0..self.count {
             self.buf_blocks[i].copy_from_slice(&self.ctr_generic_array[i]);
         }
-        self.aes = Aes128::new(GenericArray::from_slice(key));
+        let mut aes_key = Key::<Aes128>::default();
+        aes_key.copy_from_slice(key);
+        self.aes = Aes128::new(&aes_key);
         self.buf_ptr = 0;
         self.have = 0;
         self.count = 0;
@@ -68,9 +62,8 @@ impl FixedKeyPrgStream {
     pub fn refill(&mut self) {
         self.have += AES_BLOCK_SIZE;
 
-        let mut to_encrypt = self.ctr_generic_array[self.count];
+        let mut to_encrypt = self.ctr_generic_array[self.count].clone();
         self.aes.encrypt_block(&mut to_encrypt);
-        // Compute:   AES_0000(ctr) XOR ctr
         to_encrypt
             .iter_mut()
             .zip(self.ctr_generic_array[self.count].iter())
@@ -83,13 +76,7 @@ impl FixedKeyPrgStream {
     pub fn refill8(&mut self) {
         self.have += 8 * AES_BLOCK_SIZE;
 
-        // Create a reference to exactly 8 blocks for encryption
-        let mut blocks_to_encrypt =
-            GenericArray::<GenericArray<u8, typenum::U16>, typenum::U8>::from_mut_slice(
-                &mut self.ctr_generic_array[self.count..self.count + 8],
-            )
-            .clone();
-
+        let mut blocks_to_encrypt = self.ctr_generic_array[self.count..self.count + 8].to_vec();
         self.aes.encrypt_blocks(&mut blocks_to_encrypt);
 
         for i in 0..8 {
@@ -103,7 +90,6 @@ impl FixedKeyPrgStream {
         self.count += 8;
     }
 
-    // From RustCrypto aesni crate
     #[inline(always)]
     #[allow(unused)]
     fn inc_be(v: __m128i) -> __m128i {
@@ -121,18 +107,6 @@ impl FixedKeyPrgStream {
         }
     }
 
-    // Modified from RustCrypto aesni crate
-    #[inline(always)]
-    fn load(key: &[u8; 16]) -> __m128i {
-        // Help the compiler infer the GenericArray length (U16)
-        let val: &GenericArray<u8, typenum::U16> = GenericArray::from_slice(key);
-
-        // Safety: `loadu` supports unaligned loads
-        #[allow(clippy::cast_ptr_alignment)]
-        unsafe {
-            _mm_loadu_si128(val.as_ptr() as *const __m128i)
-        }
-    }
 }
 
 impl TryRng for FixedKeyPrgStream {
@@ -152,21 +126,19 @@ impl TryRng for FixedKeyPrgStream {
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
         let mut dest_ptr = 0;
         while dest_ptr < dest.len() {
-            if self.have < dest.len() - dest_ptr {
-                if dest.len() - dest_ptr - self.have > 4 * AES_BLOCK_SIZE {
+            if self.buf_ptr == self.have {
+                if dest.len() > 4 * AES_BLOCK_SIZE {
                     self.refill8();
                 } else {
                     self.refill();
                 }
             }
 
-            let to_copy = std::cmp::min(self.have, dest.len() - dest_ptr);
-            // let start = Instant::now();
+            let to_copy = std::cmp::min(self.have - self.buf_ptr, dest.len() - dest_ptr);
             dest[dest_ptr..dest_ptr + to_copy]
                 .copy_from_slice(&self.buf[self.buf_ptr..self.buf_ptr + to_copy]);
 
             self.buf_ptr += to_copy;
-            self.have -= to_copy;
             dest_ptr += to_copy;
         }
         Ok(())

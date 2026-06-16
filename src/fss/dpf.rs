@@ -1,4 +1,4 @@
-use crate::aes::{FixedKeyPrgStream, AES_BLOCK_SIZE};
+use crate::randomness::aes::{FixedKeyPrgStream, AES_BLOCK_SIZE};
 use rand::RngExt;
 use rand::Rng;
 use crate::bytes_to_u128;

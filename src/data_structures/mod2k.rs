@@ -1,4 +1,4 @@
-use crate::{Group, Share};
+use crate::Group;
 use scuttlebutt::Block;
 use std::convert::TryFrom;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Sub};
@@ -248,20 +248,6 @@ impl Group for Mod2k {
         }
     }
 }
-
-// Implement FromRng trait requirement for Share
-impl crate::data_structures::prg::FromRng for Mod2k {
-    fn from_rng(&mut self, _stream: &mut impl rand_core::Rng) {
-        self.val = rand::random::<u128>() & self.modulus_mask;
-    }
-
-    fn randomize(&mut self) {
-        self.val = rand::random::<u128>() & self.modulus_mask;
-    }
-}
-
-// Implement Share trait
-impl Share for Mod2k {}
 
 // Implement From<u32> for ModInt
 impl From<u32> for Mod2k {

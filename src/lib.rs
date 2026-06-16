@@ -9,17 +9,11 @@ pub mod naive;
 pub mod randomness;
 pub mod data_toolkit;
 
-pub mod aes;
 pub mod channel;
 pub mod okvs_f2k;
 pub mod synthetic_data;
 pub mod util;
 
-#[macro_use]
-extern crate lazy_static;
-
-pub use crate::data_structures::field::Dummy;
-pub use crate::data_structures::field::FieldElm;
 use scuttlebutt::Block;
 
 // Additive group, such as (Z_n, +)
@@ -33,27 +27,6 @@ pub trait Group {
     fn mul(&mut self, other: &Self);
     fn mul_lazy(&mut self, other: &Self);
     fn sub(&mut self, other: &Self);
-}
-
-pub trait Share: Group + data_structures::prg::FromRng + Clone {
-    fn random() -> Self {
-        let mut out = Self::zero();
-        out.randomize();
-        out
-    }
-
-    fn share(&self) -> (Self, Self) {
-        let mut s0 = Self::zero();
-        s0.randomize();
-        let mut s1 = self.clone();
-        s1.sub(&s0);
-
-        (s0, s1)
-    }
-
-    fn share_random() -> (Self, Self) {
-        (Self::random(), Self::random())
-    }
 }
 
 pub fn u32_to_bits(nbits: u8, input: u32) -> Vec<bool> {
@@ -232,16 +205,6 @@ fn bytes_to_u128(bytes: &[u8]) -> u128 {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn share() {
-        let val = FieldElm::random();
-        let (s0, s1) = val.share();
-        let mut out = FieldElm::zero();
-        out.add(&s0);
-        out.add(&s1);
-        assert_eq!(out, val);
-    }
 
     #[test]
     fn to_bits() {
