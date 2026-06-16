@@ -37,37 +37,42 @@ In Mosaic, the model we follow is:
 
 # Installation
 
-Dependencies:
-- Rust: this code has been tested with Rust 1.96.0 (ac68faa20 2026-05-25)
+This code has been tested with `Ubuntu 24.04.4 LTS`.
 
+Dependencies:
+- Rust: this code has been tested with `Rust 1.96.0` (ac68faa20 2026-05-25)
+- All dependencies in Cargo.toml has been up-to-date at the moment of publishing this artifact.
+
+Please refer to the following guide to install Rust in Ubuntu: [Digital Ocean Guide](https://www.digitalocean.com/community/tutorials/install-rust-on-ubuntu-linux).
+
+After getting all the dependencies, to compile, set the Rust flag:
+```
+export RUSTFLAGS+="-C target-cpu=native" 
+cargo build --release
+```
 
 # How to run
 
-To compile, set the Rust flag:
-```
-$ export RUSTFLAGS+="-C target-cpu=native" 
-$ cargo build --release
-```
 
 You should prepare four terminals and one config file. First, run server0: 
 ```
-$ cargo run --release --bin fhh_cli server0 --config (path_to_config) --threads (num_threads) 
+cargo run --release --bin fhh_cli server0 --config (path_to_config) --threads (num_threads) 
 ```
 
 Then, run server1:
 ```
-$ cargo run --release --bin fhh_cli server0 --config (path_to_config) --threads (num_threads) 
+cargo run --release --bin fhh_cli server0 --config (path_to_config) --threads (num_threads) 
 ```
 
 Now, the servers should be ready to process client requests. 
 
 ```
-$ cargo run --release --bin fhh_cli client --config (path_to_config)
+cargo run --release --bin fhh_cli client --config (path_to_config)
 ```
 
 Wait until the client sent through everything, run the dealer:
 ```
-$ cargo run --release --bin fhh_cli dealer --config (path_to_config) --threads (num_threads)
+cargo run --release --bin fhh_cli dealer --config (path_to_config) --threads (num_threads)
 ```
 
 # How to set up data files:
