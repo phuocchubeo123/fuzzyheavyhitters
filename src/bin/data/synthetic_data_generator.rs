@@ -5,7 +5,7 @@
 //! the fuzzy heavy hitters protocol. It reads configuration from a JSON
 //! file and exports the generated data to specified output files.
 
-use mosaic::synthetic_data::{SyntheticDataConfig, SyntheticDataGenerator, SyntheticDataset};
+use mosaic::data_toolkit::synthetic_data::{SyntheticDataConfig, SyntheticDataGenerator, SyntheticDataset};
 use serde_json;
 use std::env;
 use std::fs;

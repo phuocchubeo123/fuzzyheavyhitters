@@ -1,3 +1,5 @@
+pub mod synthetic_data;
+
 use csv::Reader;
 use std::error::Error;
 use std::path::Path;

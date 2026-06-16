@@ -11,7 +11,6 @@ pub mod data_toolkit;
 
 pub mod channel;
 pub mod okvs_f2k;
-pub mod synthetic_data;
 pub mod util;
 
 use scuttlebutt::Block;

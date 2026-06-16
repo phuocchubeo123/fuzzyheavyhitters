@@ -10,59 +10,58 @@ lazy_static = "1.5.0"
 num-bigint = { version = "0.4.6", features = ["rand", "serde"] }
 rand = "0.10.1"
 rand_core = "0.10.1"
-rand_distr = "0.6.0"
 clap = "4.6.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.150"
 aes = "0.9.1"
-num = "0.2.1"
 rayon = "1.3.1"
-primal = "0.2.3"
-zipf = "6.1.0"
-bincode = "1.3"
-csv = "1.2"
-crossbeam = "0.8"
+csv = "1.4.0"
 fancy-garbling = { git = "https://github.com/GaloisInc/swanky", rev="553ede0"}
 ocelot = { git = "https://github.com/GaloisInc/swanky", rev="553ede0"}
 scuttlebutt = { git = "https://github.com/GaloisInc/swanky", rev="553ede0"}
-num_cpus = "1.16.0"
-memmap2 = "0.9.5"
-blake3 = "1.8.2"
+blake3 = "1.8.5"
 indicatif = "0.18.0"
-chrono = "0.4"
-chrono-tz = "0.8"
 anyhow = "1"
-sysinfo = "0.37.2"
+sysinfo = "0.39.3"
 uint = "0.10.0"
 
+# Benchmarking components of the Mosaic system
+[[bin]]
+name = "batch_equality_fss_benchmark"
+path = "src/bin/mosaic_components/batch_equality_fss_benchmark.rs"
 
 [[bin]]
+name = "batch_equality_gc_benchmark"
+path = "src/bin/mosaic_components/batch_equality_gc_benchmark.rs"
+
+[[bin]]
+name = "batch_mu_bounded_fss_benchmark"
+path = "src/bin/mosaic_components/batch_mu_bounded_fss_benchmark.rs"
+
+[[bin]]
+name = "batch_mu_bounded_gc_benchmark"
+path = "src/bin/mosaic_components/batch_mu_bounded_gc_benchmark.rs"
+
+[[bin]]
+name = "threshold_fss_benchmark"
+path = "src/bin/mosaic_components/threshold_fss_benchmark.rs"
+
+[[bin]]
+name = "threshold_gc_benchmark"
+path = "src/bin/mosaic_components/threshold_gc_benchmark.rs"
+
+# Miscellaneous
+[[bin]]
 name = "okvs_benchmark"
-path = "benchmark/okvs_timing.rs"
+path = "src/bin/benchmarks/okvs_timing.rs"
 
 [[bin]]
 name = "okvs_parallel_stress_test"
-path = "benchmark/parallel_stress_test.rs"
+path = "src/bin/benchmarks/parallel_stress_test.rs"
 
 [[bin]]
 name = "aes_benchmark"
 path = "src/bin/benchmarks/aes_benchmark.rs"
-
-[[bin]]
-name = "batch_equality_fss_benchmark"
-path = "src/bin/benchmarks/batch_equality_fss_benchmark.rs"
-
-[[bin]]
-name = "batch_equality_gc_benchmark"
-path = "src/bin/benchmarks/batch_equality_gc_benchmark.rs"
-
-[[bin]]
-name = "batch_mu_bounded_fss_benchmark"
-path = "src/bin/benchmarks/batch_mu_bounded_fss_benchmark.rs"
-
-[[bin]]
-name = "batch_mu_bounded_gc_benchmark"
-path = "src/bin/benchmarks/batch_mu_bounded_gc_benchmark.rs"
 
 [[bin]]
 name = "bit_conversion_bench"
@@ -88,17 +87,6 @@ path = "src/bin/benchmarks/ldcf_expand_bench.rs"
 name = "ringvec_bench"
 path = "src/bin/benchmarks/ringvec_bench.rs"
 
-[[bin]]
-name = "ringvec_dyn_bench"
-path = "src/bin/benchmarks/ringvec_dyn_bench.rs"
-
-[[bin]]
-name = "threshold_fss_benchmark"
-path = "src/bin/benchmarks/threshold_fss_benchmark.rs"
-
-[[bin]]
-name = "threshold_gc_benchmark"
-path = "src/bin/benchmarks/threshold_gc_benchmark.rs"
 
 #### Data Generation binaries ####
 
@@ -128,16 +116,16 @@ path = "src/bin/naive/naive_server.rs"
 
 [[bin]]
 name = "mosaic_dealer"
-path = "src/bin/mosaic_dealer.rs"
+path = "src/bin/mosaic_end_to_end/mosaic_dealer.rs"
 
 [[bin]]
 name = "mosaic_client"
-path = "src/bin/mosaic_client.rs"
+path = "src/bin/mosaic_end_to_end/mosaic_client.rs"
 
 [[bin]]
 name = "mosaic_server"
-path = "src/bin/mosaic_server.rs"
+path = "src/bin/mosaic_end_to_end/mosaic_server.rs"
 
 [[bin]]
 name = "mosaic_others"
-path = "src/bin/mosaic_others.rs"
+path = "src/bin/mosaic_end_to_end/mosaic_others.rs"
