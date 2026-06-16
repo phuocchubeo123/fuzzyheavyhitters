@@ -18,6 +18,15 @@ fn load_query_points(file_path: &str) -> Result<Vec<Vec<u128>>, String> {
 
 /// Run server for both known and unknown dictionary cases
 fn run_server(config_path: &str, is_server1: bool, num_threads: usize) -> Result<(), String> {
+    if num_threads == 0 {
+        return Err("--threads must be greater than 0".to_string());
+    }
+
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build_global()
+        .map_err(|e| format!("Failed to configure Rayon thread pool: {}", e))?;
+
     let cli_config = CliConfig::from_file(config_path)?;
     let server_id = if is_server1 { 1 } else { 0 };
     let is_known_dictionary = cli_config.protocol.dictionary_type == "Known";

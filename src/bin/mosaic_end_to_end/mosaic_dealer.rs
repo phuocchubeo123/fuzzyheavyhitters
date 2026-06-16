@@ -6,6 +6,15 @@ use mosaic::{
 
 /// Run as dealer - generates and distributes FSS keys to servers
 fn run_dealer(config_path: &str, num_threads: usize) -> Result<(), String> {
+    if num_threads == 0 {
+        return Err("--threads must be greater than 0".to_string());
+    }
+
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build_global()
+        .map_err(|e| format!("Failed to configure Rayon thread pool: {}", e))?;
+
     let start_time = std::time::Instant::now();
     println!("Starting FSS Dealer...");
     let cli_config = CliConfig::from_file(config_path)?;
