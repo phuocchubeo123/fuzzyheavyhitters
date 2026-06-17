@@ -2,7 +2,7 @@ use clap::Parser;
 use rand::RngExt;
 use mosaic::{
     channel::{connect_to, listen_to},
-    configs::property_test_config::BenchmarkConfig,
+    configs::property_test_config::PropertyTestBenchmarkConfig,
     fuzzy_match::{
         check_phase::CheckPhase,
         check_phase_types::{CheckConfig, CheckMethod, CheckProperty},
@@ -23,7 +23,7 @@ fn generate_test_inputs(num_inputs: usize, input_bit_length: usize) -> Vec<Vec<b
 }
 
 fn run_server_benchmark(config_path: &str, server: bool) -> Result<(), Box<dyn std::error::Error>> {
-    let config = BenchmarkConfig::from_file(config_path)?;
+    let config = PropertyTestBenchmarkConfig::from_file(config_path)?;
     if server {
         println!("Running as server 1");
     } else {

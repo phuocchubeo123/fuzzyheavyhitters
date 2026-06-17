@@ -78,10 +78,10 @@ fn run_server(config_path: &str, is_server1: bool, num_threads: usize) -> Result
             .map_err(|e| format!("Failed to set up channels from other server: {}", e))?
     };
 
-    let thread_pool = rayon::ThreadPoolBuilder::new()
+    rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
-        .build()
-        .map_err(|e| format!("Failed to build thread pool: {}", e))?;
+        .build_global()
+        .map_err(|e| format!("Failed to configure Rayon thread pool: {}", e))?;
 
     println!("Running server protocol...");
     let start = std::time::Instant::now();
@@ -93,7 +93,6 @@ fn run_server(config_path: &str, is_server1: bool, num_threads: usize) -> Result
                 .run_server_known_dictionary_parallel(
                     &client_shares,
                     &query_points,
-                    &thread_pool,
                     &mut other_server_channels,
                 )
                 .map_err(|e| format!("Failed to run server protocol: {}", e))?;

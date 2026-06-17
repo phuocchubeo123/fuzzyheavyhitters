@@ -2,7 +2,7 @@ use clap::Parser;
 use rand::RngExt;
 use mosaic::{
     channel::{connect_to, listen_to},
-    configs::property_test_config::BenchmarkConfig,
+    configs::property_test_config::PropertyTestBenchmarkConfig,
     data_structures::mod2k::Mod2k,
     fuzzy_match::{
         dealer::{FssDealer, FssKeyBatch},
@@ -22,7 +22,7 @@ fn generate_test_inputs(num_inputs: usize, modulus: u128) -> Vec<Mod2k> {
 }
 
 fn run_dealer_benchmark(config_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let config = BenchmarkConfig::from_file(config_path)?;
+    let config = PropertyTestBenchmarkConfig::from_file(config_path)?;
 
     // Create channels
     let mut signal_server0_channel = listen_to(
@@ -87,7 +87,7 @@ fn run_dealer_benchmark(config_path: &str) -> Result<(), Box<dyn std::error::Err
 }
 
 fn run_server_benchmark(config_path: &str, server: bool) -> Result<(), Box<dyn std::error::Error>> {
-    let config = BenchmarkConfig::from_file(config_path)?;
+    let config = PropertyTestBenchmarkConfig::from_file(config_path)?;
     if server {
         println!("Running as server 1");
     } else {

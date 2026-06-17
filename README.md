@@ -202,7 +202,7 @@ We include the config for all of our experiment runs in the **configs** folder.
 ```
 
 
-## Running the protocol
+## Running the Mosaic protocol
 
 Open four terminals (or four different machines, that can talk to each other through Tcp).
 Please run the following four command lines for the four simulated parties:
@@ -223,11 +223,27 @@ cargo run --release --bin mosaic_client -- --config (path_to_config)
 cargo run --release --bin mosaic_dealer --config (path_to_config) --threads (num_threads)
 ```
 
-## Command line parameters 
+Command line parameters:
 - `config`: All four commands need a config parameter, please provide the path to the config file that you prepared in the [Prepare Config](#prepare-the-config-file) section.
 - `threads`: Specify the number of threads that the two servers and the dealer use.
 Currently we only tested the code for the case when the number of threads used by all these three parties are the same.
 So please set `threads` to be the same in all three commands.
+
+## Running the naive solution 
+The naive solution only has two servers and a client, since we only implement the naive solution using Garbled Circuit for fuzzy matching.
+You can reuse the config file that you prepared for the Mosaic's solution runs.
+- `server0`
+```
+cargo run --release --bin naive_server -- --side 0 --config (path_to_config) --num-threads (num_threads)
+```
+- `server1`
+```
+cargo run --release --bin naive_server -- --side 1 --config (path_to_config) --num-threads (num_threads)
+```
+- `client`
+```
+cargo run --releas --bin naive_client -- --config (path_to_config)
+```
 
 # Authors
 Gayathri Garimella, _Brown University_
