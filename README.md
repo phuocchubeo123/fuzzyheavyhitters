@@ -1,6 +1,6 @@
 # MOSAIC
 
-This is a Rust implementation of the Mosaic framework in the paper _Mosaic: A Modular Framework for Private Fuzzy Heavy Hitters_.
+This is a Rust implementation of the Mosaic framework in the paper _Mosaic: A Modular Framework for Private Fuzzy Heavy Hitters_ (CCS 2026).
 The description of the problem setting for Mosaic can be found in the [Problem Settings](#problem-settings) section, and we describe our solution in the [Mosaic's Solution](#mosaics-solution) section.
 The details about the artifact, including [Installation](#installation) and [How to run](#how-to-run) is shown afterward.
 
@@ -20,20 +20,36 @@ More formally, given a dataset of $d$-dimensional points, a _Fuzzy Heavy Hitter_
 The question that whether a point $x$ is a Fuzzy Heavy Hitter is equivalent to the following question:
 **Does there exists at least $t$ other points $y$ in the dataset, such that $d(x, y) \le \delta$?**
 
-## The setting of Private Fuzzy Heavy Hitters
+## Private Fuzzy Heavy Hitters
 The definition of _Fuzzy Heavy Hitters_ already half of the story, the other half is: What does _private_ mean in this case?
 First, we have $n$ clients, each will provide a $d$-dimensional point e.g. his/her starting point of the ride.
 Now, a data analyst only wants to learn the Fuzzy Heavy Hitters. 
 He does not want to know each client's provided point, and vice versa, the client also does not want the point to be leaked to the analyst.
 
+In more details, there are two problem settings for Private Fuzzy Heavy Hitters that we consider in Mosaic:
+- **Known Dictionary**: The data analyst has a list of potential Fuzzy Heavy Hitters, and wants to find out which ones of them are actually popular.
+- **Unknown Dictionary**: The data analyst does not have any information beforehand, and discovers all the heavy hitters from the clients' dataset.
+
+## Mosaic's design
 In Mosaic, we realize this functionality with the help from two servers, which will "collect" the points from clients in a private way, then do some aggregation to learn only the final Fuzzy Heavy Hitters.
+We illustrate the protocol by implementing the `server`, the `client`, and the `dealer`. 
+All CLI codes can be found in **src/bin/mosaic_end_to_end**.
+- `server0` and `server1`: The source code for the servers' CLI is in **mosaic_server.rs**. At the start of the protocol, the servers receive _secret sharings_ (or rather _function secret sharings_) of all clients' points. 
+Then two servers run a distributed protocol that either check the heavy hitters (_known dictionary_ setting) or discover the heavy hitters (_unknown dictionary_ setting).
+- `client`: We use a single file to simulate and generate _function secret sharing_ for many client points, instead of spawning out one instance for each client. 
+The CLI's source code can be found in **mosaic_client.rs**.
+The clients go offline after sending the secret shared points to the servers.
+- `dealer`: There are in fact two options to run the distributed protocol between the servers, with one including the help from a dealer. 
+The dealer's task is to generate _correlated randomness_ that does not require any information about the actual protocol data.
+This means the random correlations can be generated _continuously_, or _processing for life_, and can be sent to the servers upon request.
+The CLI code for the dealer is in **mosaic_dealer.rs**.
+
+For more details about the math, please refer to the paper.
 
 ## Threat Model
 In Mosaic, the model we follow is:
 - The two servers are _non-colluding_ e.g. two different non-profit organizations helping with this task.
 - The clients cannot learn any other point, but can try to provide _malformed_ sharings of points to mess up the computation.
-
-# Mosaic's Solution
 
 # Installation
 
@@ -45,37 +61,16 @@ Dependencies:
 
 Please refer to the following guide to install Rust in Ubuntu: [Digital Ocean Guide](https://www.digitalocean.com/community/tutorials/install-rust-on-ubuntu-linux).
 
-After getting all the dependencies, to compile, set the Rust flag:
+After getting all the dependencies, to compile, simply run `cargo build`:
 ```
-export RUSTFLAGS+="-C target-cpu=native" 
 cargo build --release
 ```
 
 # How to run
+There are four parties involved in this protocol: `server0`, `server1`, `client` and `dealer`. 
+Before running the protocol, you first need to prepare a list of clients' points, and also a config file.
 
-
-You should prepare four terminals and one config file. First, run server0: 
-```
-cargo run --release --bin fhh_cli server0 --config (path_to_config) --threads (num_threads) 
-```
-
-Then, run server1:
-```
-cargo run --release --bin fhh_cli server0 --config (path_to_config) --threads (num_threads) 
-```
-
-Now, the servers should be ready to process client requests. 
-
-```
-cargo run --release --bin fhh_cli client --config (path_to_config)
-```
-
-Wait until the client sent through everything, run the dealer:
-```
-cargo run --release --bin fhh_cli dealer --config (path_to_config) --threads (num_threads)
-```
-
-# How to set up data files:
+## Prepare data
 Simply create a json file, for example, the following json file contains two client points:
 ```javascript
 [
@@ -89,9 +84,11 @@ Simply create a json file, for example, the following json file contains two cli
   ]
 ]
 ```    
+TODO: More details on the data we prepared in the experiments.
 
-# What about the config?
-The config format is as follow:
+## Prepare the config file
+The config format is as follow.
+We include the config for all of our experiment runs in the **configs** folder.
 ```javascript
 {
   "data_file": "path_to_client_points",
@@ -127,3 +124,44 @@ The config format is as follow:
   }
 }
 ```
+
+
+## Running the protocol
+
+Open four terminals (or four different machines, that can talk to each other through Tcp).
+Please run the following four command lines for the four simulated parties:
+- `server0`
+```
+cargo run --release --bin mosaic_server -- --side 0 --config (path_to_config) --threads (num_threads) 
+```
+- `server1`
+```
+cargo run --release --bin mosaic_server -- --side 1 --config (path_to_config) --threads (num_threads) 
+```
+- `client`
+```
+cargo run --release --bin mosaic_client -- --config (path_to_config)
+```
+- `dealer`
+```
+cargo run --release --bin mosaic_dealer --config (path_to_config) --threads (num_threads)
+```
+
+## Command line parameters 
+- `config`: All four commands need a config parameter, please provide the path to the config file that you prepared in the [Prepare Config](#prepare-the-config-file) section.
+- `threads`: Specify the number of threads that the two servers and the dealer use.
+Currently we only tested the code for the case when the number of threads used by all these three parties are the same.
+So please set `threads` to be the same in all three commands.
+
+# Authors
+Gayathri Garimella, _Brown University_
+
+Peihan Miao, _Brown University_
+
+Eileen Nolan, _Brown University_
+
+Phuoc Van Long Pham, _Brown University_
+
+Siddarth Sitaraman, _Brown University_
+
+For more information about the implementation, please contact Phuoc: phuoc_van_long_pham@brown.edu.
