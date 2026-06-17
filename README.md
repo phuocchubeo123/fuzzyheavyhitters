@@ -51,6 +51,8 @@ In Mosaic, the model we follow is:
 - The two servers are _non-colluding_ e.g. two different non-profit organizations helping with this task.
 - The clients cannot learn any other point, but can try to provide _malformed_ sharings of points to mess up the computation.
 
+# Experimental Results
+
 # Installation
 
 This code has been tested with `Ubuntu 24.04.4 LTS`.
