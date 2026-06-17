@@ -11,6 +11,7 @@ use std::path::Path;
 struct Args {
     input: String,
     output: String,
+    output_type: u8,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -29,7 +30,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Read and convert CSV data
     println!("Reading and converting CSV data from {}...", input_file);
-    let client_points = read_csv_and_convert(input_file)?;
+    let client_points = read_csv_and_convert(input_file, args.output_type)?;
     println!(
         "Converted {} ride points to client format",
         client_points.len()

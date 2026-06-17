@@ -80,23 +80,43 @@ pub fn csv_to_bitvecs<P: AsRef<Path>>(path: P) -> Result<Vec<Vec<Vec<bool>>>, Bo
         .collect()
 }
 
-pub fn read_csv_and_convert<P: AsRef<Path>>(path: P) -> Result<Vec<Vec<u128>>, Box<dyn Error>> {
+pub fn read_csv_and_convert<P: AsRef<Path>>(path: P, output_type: u8) -> Result<Vec<Vec<u128>>, Box<dyn Error>> {
     let mut rdr = Reader::from_path(path)?;
 
-    rdr.records()
-        .map(|record| {
-            let record = record?;
-            let start_lon = record[15].parse::<f64>()?;
-            let start_lat = record[16].parse::<f64>()?;
-            // let end_lat = record[6].parse::<f64>()?;
-            // let end_lon = record[7].parse::<f64>()?;
+    match output_type {
+        0 => {
+            rdr.records()
+                .map(|record| {
+                    let record = record?;
+                    let start_lon = record[15].parse::<f64>()?;
+                    let start_lat = record[16].parse::<f64>()?;
 
-            // Convert to grid coordinates (same as csv_to_bitvecs function)
-            let (start_lat_grid, start_lon_grid) = geo_to_grid(start_lat, start_lon);
-            // let (end_lat_grid, end_lon_grid) = geo_to_grid(end_lat, end_lon);
+                    // Convert to grid coordinates (same as csv_to_bitvecs function)
+                    let (start_lat_grid, start_lon_grid) = geo_to_grid(start_lat, start_lon);
 
-            // Convert to u128 and create point as [lat, lon]
-            Ok(vec![start_lat_grid as u128, start_lon_grid as u128])
-        })
-        .collect()
+                    // Convert to u128 and create point as [lat, lon]
+                    Ok(vec![start_lat_grid as u128, start_lon_grid as u128])
+                })
+                .collect()
+        }
+        1 => {
+            rdr.records()
+                .map(|record| {
+                    let record = record?;
+                    let start_lon = record[15].parse::<f64>()?;
+                    let start_lat = record[16].parse::<f64>()?;
+                    let end_lat = record[6].parse::<f64>()?;
+                    let end_lon = record[7].parse::<f64>()?;
+
+                    // Convert to grid coordinates (same as csv_to_bitvecs function)
+                    let (start_lat_grid, start_lon_grid) = geo_to_grid(start_lat, start_lon);
+                    let (end_lat_grid, end_lon_grid) = geo_to_grid(end_lat, end_lon);
+
+                    // Convert to u128 and create point as [lat, lon]
+                    Ok(vec![start_lat_grid as u128, start_lon_grid as u128, end_lat_grid as u128, end_lon_grid as u128])
+                })
+                .collect()
+        }
+        _ => Err(format!("unsupported output_type: {}", output_type).into()),
+    }
 }

@@ -38,7 +38,7 @@ All CLI codes can be found in **src/bin/mosaic_end_to_end**.
 Then two servers run a distributed protocol that either check the heavy hitters (_known dictionary_ setting) or discover the heavy hitters (_unknown dictionary_ setting).
 - `client`: We use a single file to simulate and generate _function secret sharing_ for many client points, instead of spawning out one instance for each client. 
 The CLI's source code can be found in **mosaic_client.rs**.
-The clients go offline after sending the secret shared points to the servers.
+The clients goes offline after sending the secret shared points to the servers.
 - `dealer`: There are in fact two options to run the distributed protocol between the servers, with one including the help from a dealer. 
 The dealer's task is to generate _correlated randomness_ that does not require any information about the actual protocol data.
 This means the random correlations can be generated _continuously_, or _processing for life_, and can be sent to the servers upon request.
@@ -52,6 +52,51 @@ In Mosaic, the model we follow is:
 - The clients cannot learn any other point, but can try to provide _malformed_ sharings of points to mess up the computation.
 
 # Experimental Results
+
+## Parameters
+We choose computational security parameter $\kappa = 128$ and statistical security parameters $\lambda = 40$. 
+
+1. **OKVS**: We use RB-OKVS, and choose a conservative choice of parameters in order to achieve $\lambda = 40$ statistical parameter for failure rate.
+For more details, we set the OKVS rate to be $\epsilon = 0.1$, which means the number of columns is $1.1\times$ the number of rows. 
+Furthermore, the number of columns is always at least $60$.
+About the band-width, we set the band-width to be a fixed $100$, and to be exactly the number of columns in case this quantity is smaller than $100$.
+This achieves the OKVS encoding failure probability $2^{-40}$ according to the [RB-OKVS](https://www.usenix.org/conference/usenixsecurity23/presentation/bienstock) paper.
+
+2. **Input length** $h_1$: The input length just needs to be large enough to represent each coordinate. 
+In the cleaned Ride Austin dataset, each coordinate can be represented by $11$ bits, hence we set $h_1 = 11$ in all of our experiments.
+
+3. **FSS output** $h_2$: The FSS output for the _FSS-based_ approach is set differently from the _OKVS-based_ approach.
+- _FSS-based_ approach: As correctness is guarantee for all points in the domain, we do not need to account for failure probability, hence the output simple needs to not cause overflow when comparing with the distance threshold.
+For example, for distance metric $L_2$ with threshold $\delta = 5$, and there are $2$ dimensions, we can bound the FSS (distance) output dimension with $5^2 + 1$, and the maximum total distance calculated is $2 \times (5^2 + 1) = 52$, which can be represented in $6$ bits.
+In our experiments for the unknown dictionary setting, we choose $\delta = 5$, and we only run the experiments for the case when the number of dimensions is $d = 2$. 
+In the following table, we provide suggested $h_2$ parameter in the FSS-based approach, for number of dimensions $d=2$ and $d=4$.
+
+<div align="center">
+
+| distance metric | $L_{\infty}$ | $L_1$ | $L_2$ |
+| --- | ---: | ---: | ---:|
+| $h_2$ when $d=2$ | $1$ | $4$ | $6$ |
+| $h_2$ when $d=4$ | $1$ | $5$ | $7$ |
+
+</div>
+
+- _OKVS-based_ approach: Choosing $h_2$ for the OKVS-based approach is more tricky due to the correctness probability. TODO
+
+4. **Fuzzy match output** $h_3$: The fuzzy match output is a mod $2^{h_3}$ value, but with value being only either $0$ (if $d(x, y)$ exceeds $\delta$, which means the two points are not close, hence not a fuzzy match) or $1$.
+For each point $x$ in consideration, it is fuzzy-matched with exactly $n$ other points $y$, where $n$ is the number of clients, hence aggregating the results return a value that does not exceed $n$.
+We just need to choose $h_3$ such that $2^{h_3} \ge n$. 
+The reference for the parameter $h_3$ chosen in our experiments for the RideAustin dataset is included in the following table.
+
+<div align="center">
+
+| Dataset | busiest_day | busiest_week | busiest_month |
+| --- | ---: | ---: | ---:|
+| Number of client points | $21,581$ | $59,040$ | $115,174$ |
+| Fuzzy match output $h_3$ | $15$ | $16$ | $18$ |
+
+</div>
+
+
 
 # Installation
 
@@ -68,7 +113,7 @@ After getting all the dependencies, to compile, simply run `cargo build`:
 cargo build --release
 ```
 
-# How to run
+# How to run Mosaic
 There are four parties involved in this protocol: `server0`, `server1`, `client` and `dealer`. 
 Before running the protocol, you first need to prepare a list of clients' points, and also a config file.
 
@@ -86,7 +131,36 @@ Simply create a json file, for example, the following json file contains two cli
   ]
 ]
 ```    
-TODO: More details on the data we prepared in the experiments.
+
+In our experiments, we clean the RideAustin dataset and obtain three sub-datasets with different sizes, in order to test the scalability of Mosaic. 
+Each sub-dataset is stored in a `.csv`, that is available in the `data` folder in the Zenodo repository of Mosaic. 
+For example, the csv file for the rides in the busiest day (the other two datasets are for the busiest week and the busiest month) can be found at `data/sample_busiest_day.csv` on Zenodo.
+The summary of the size of each sub-dataset is shown in the following table.
+<div align="center">
+
+| Dataset | busiest_day | busiest_week | busiest_month |
+| --- | ---: | ---: | ---:|
+| Number of client points | $21,581$ | $59,040$ | $115,174$ |
+
+</div>
+
+The .csv files are then extracted into json files that contain a list of $2$-dimensional points (for the starting points of rides) or $4$-dimensional points (for the start and end points of rides), using the code in `src/bin/data/ride_austin_json_generator.rs`.
+We can run the json file generator from the csv file with the following command:
+```
+cargo run --release --bin ride_austin_json_generator -- 
+--input (input_csv) --output (output_json) 
+--output-type (output_type)
+```
+Here, the `output-type` is $0$ if you want $2$-dimensional points (corresponding to the start of a ride), and $1$ if you want $4$-dimensional points (corresponding to the start and the end of a ride).
+
+To sample a dictionary for the servers to rely on in the _known dictionary_ setting, use `ride_austin_json_sample.rs`.
+```
+cargo run --release --bin ride_austin_json_sampler --
+--input (input_csv) --output (output_json) 
+--query-num (dictionary_size)
+--output-type (output_type)
+```
+All prepared .json files for our experiments are available on Zenodo, in the same `data` folder. 
 
 ## Prepare the config file
 The config format is as follow.

@@ -16,6 +16,8 @@ struct Args {
     output: String,
     #[arg(short, long)]
     query_num: usize,
+    #[arg(short, long, default_value_t = 0)]
+    output_type: u8,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -23,6 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let input_file = &args.input;
     let output_file = &args.output;
     let query_num = args.query_num;
+    let output_type = args.output_type;
 
     println!("Starting RideAustin client points JSON generation...");
 
@@ -35,7 +38,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Read and convert CSV data
     println!("Reading and converting CSV data from {}...", input_file);
-    let client_points = read_csv_and_convert(input_file)?;
+    let client_points = read_csv_and_convert(input_file, output_type)?;
     println!(
         "Converted {} ride points to client format",
         client_points.len()
