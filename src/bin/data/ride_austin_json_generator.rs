@@ -9,8 +9,11 @@ use std::path::Path;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    #[arg(short, long)]
     input: String,
+    #[arg(short, long)]
     output: String,
+    #[arg(short, long)]
     output_type: u8,
 }
 

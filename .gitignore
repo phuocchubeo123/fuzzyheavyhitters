@@ -13,7 +13,8 @@ script
 .*.swp
 
 # Data files and generated synthetic data
-/data/
+/data/*
+/results/*
 !src/bin/amazon.json
 !src/bin/config.json
 *.log
