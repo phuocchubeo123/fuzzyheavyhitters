@@ -18,3 +18,4 @@ script
 !src/bin/config.json
 *.log
 results.json
+configs/network_config.json

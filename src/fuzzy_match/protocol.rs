@@ -6,17 +6,18 @@
 use crate::{
     channel::CommTrackingChannel,
     data_structures::modp::{Modp, BarrettCtx},
+    configs::{cli_config::ProtocolParameters, method_config::MethodConfig},
     fuzzy_match::{
         dealer::{DealerSignal, DpfKeyBatch, FssKeyBatch},
         share_phase::SharePhase,
-        share_phase_types::{DistanceMetric, ShareConfig, ShareMethod},
+        share_phase_types::{DistanceMetric, ShareMethod},
         shared_range::{ShareData, SharedRange},
         sketch_phase::SketchPhase,
-        sketch_phase_types::{SketchConfig, SketchData, SketchValues, VerifyValues},
+        sketch_phase_types::{SketchData, SketchValues, VerifyValues},
         check_phase::CheckPhase,
-        check_phase_types::{CheckConfig, CheckData, CheckMethod, CheckProperty},
+        check_phase_types::{CheckData, CheckMethod, CheckProperty},
         threshold_phase::ThresholdPhase,
-        threshold_phase_types::{ThresholdConfig, ThresholdData, ThresholdMethod},
+        threshold_phase_types::{ThresholdData, ThresholdMethod},
     },
     randomness::prg::PRG,
     util::{get_distance_threshold, receive_bool_vec, send_bool_vec, u128_to_bits_msb},
@@ -41,17 +42,18 @@ pub struct MosaicProtocol {
 
 impl MosaicProtocol {
     /// Create a new protocol instance
-    pub fn new<C: Into<ShareConfig> + Into<SketchConfig> + Into<CheckConfig> + Into<ThresholdConfig> + Clone>(
-        config: C, 
+    pub fn new(
+        protocol_config: ProtocolParameters,
+        method_config: MethodConfig,
         role: bool,
         enable_sketch: bool,
         num_clients: usize,
         match_threshold: u128,
     ) -> Self {
-        let share_phase = SharePhase::new(config.clone());
-        let check_phase = CheckPhase::new(config.clone(), role);
-        let sketch_phase = SketchPhase::new(config.clone());
-        let threshold_phase = ThresholdPhase::new(config, role);
+        let share_phase = SharePhase::new(protocol_config.clone());
+        let check_phase = CheckPhase::new((protocol_config.clone(), method_config.clone()), role);
+        let sketch_phase = SketchPhase::new(protocol_config.clone());
+        let threshold_phase = ThresholdPhase::new((protocol_config, method_config), role);
         Self {
             share_phase,
             sketch_phase,

@@ -1,7 +1,7 @@
 use clap::Parser;
 use mosaic::{
     channel::{connect_to, CommTrackingChannel},
-    configs::cli_config::CliConfig,
+    configs::{cli_config::CliConfig, network_config::NetworkConfig},
     fss::dpf::DpfKey,
     naive::share_phase::SharePhaseNaive,
 };
@@ -64,21 +64,22 @@ fn send_client_shares(
     Ok(())
 }
 
-fn run_client(config_path: &str) -> Result<(), String> {
+fn run_client(config_path: &str, network_config_path: &str) -> Result<(), String> {
     let config = CliConfig::from_file(config_path)?;
+    let network_config = NetworkConfig::from_file(network_config_path)?;
     let share_config = config.to_share_config()?;
     let client_points = load_client_points(&config.data_file)?;
     println!("Loaded {} client points", client_points.len());
 
 
     let mut channel_server0 = connect_to(
-        config.network.server0_addr,
-        config.network.client_to_server0_port,
+        network_config.server0_addr,
+        network_config.client_to_server0_port,
     )
     .map_err(|e| format!("Failed to connect to server 0: {}", e))?;
     let mut channel_server1 = connect_to(
-        config.network.server1_addr,
-        config.network.client_to_server1_port,
+        network_config.server1_addr,
+        network_config.client_to_server1_port,
     )
     .map_err(|e| format!("Failed to connect to server 1: {}", e))?;
     println!("Connected to both servers");
@@ -125,12 +126,15 @@ fn run_client(config_path: &str) -> Result<(), String> {
 struct Args {
     #[arg(short, long)]
     config: String,
+    #[arg(short, long)]
+    network_config: String,
 }
 
 fn main() {
     let args = Args::parse();
     let config_path = &args.config;
-    let result = run_client(config_path);
+    let network_config_path = &args.network_config;
+    let result = run_client(config_path, network_config_path);
     if let Err(e) = result {
         eprintln!("Error running client: {}", e);
     }

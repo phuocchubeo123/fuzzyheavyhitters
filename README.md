@@ -130,7 +130,7 @@ cargo build --release
 
 # How to run Mosaic
 There are four parties involved in this protocol: `server0`, `server1`, `client` and `dealer`. 
-Before running the protocol, you first need to prepare a list of clients' points, and also a config file.
+Before running the protocol, you first need to prepare a list of clients' points, a main config file, and a separate network config file.
 
 ## Prepare data
 Simply create a json file, for example, the following json file contains two client points:
@@ -156,6 +156,7 @@ The summary of the size of each sub-dataset is shown in the following table.
 | Dataset | busiest_day | busiest_week | busiest_month |
 | --- | ---: | ---: | ---:|
 | Number of client points | $21,581$ | $59,040$ | $115,174$ |
+| $2\%$ match threshold | $431$ | $1,180$ | $2,303$ |
 
 </div>
 
@@ -193,12 +194,27 @@ We include the config for all of our experiment runs in the **configs** folder.
     "d": X,
     "share_method": "FSS", // "FSS" or "OKVS"
     "dictionary_type": "Unknown", // "Known" or "Unknown"
-    "check_method": "FSS", // "FSS" or "GC"
     "check_property": "Equality", // "Equality" or "MuBounded"
-    "threshold_method": "FSS", // "FSS" or "GC"
     "distance_metric": "Linf", // "Linf", "L1", "L2", or "L3"
     "num_clients": XXXX
   },
+  "output": {
+    "verbose": true,
+    "show_intermediate": false,
+    "output_file": "results.json"
+  }
+}
+```
+The method settings now live in a separate file at `configs/method_config.json`:
+```javascript
+{
+  "check_method": "GC", // "GC" or "FSS"
+  "threshold_method": "GC" // "GC" or "FSS"
+}
+```
+The network settings now live in a separate file at `configs/network_config.json`:
+```javascript
+{
   "network": {
     "server0_addr": "XXX.XX.XX.XX",
     "server1_addr": "XXX.XX.XX.XX",
@@ -207,11 +223,6 @@ We include the config for all of our experiment runs in the **configs** folder.
     "dealer_to_server1_port": XXXX,
     "client_to_server0_port": XXXX,
     "client_to_server1_port": XXXX
-  },
-  "output": {
-    "verbose": true,
-    "show_intermediate": false,
-    "output_file": "results.json"
   }
 }
 ```
@@ -223,41 +234,53 @@ Open four terminals (or four different machines, that can talk to each other thr
 Please run the following four command lines for the four simulated parties:
 - `server0`
 ```
-cargo run --release --bin mosaic_server -- --side 0 --config (path_to_config) --threads (num_threads) 
+cargo run --release --bin mosaic_server -- --side 0 
+--config (path_to_config) 
+--network-config (path_to_network_config) --method-config (path_to_method_config) 
+--threads (num_threads)
 ```
 - `server1`
 ```
-cargo run --release --bin mosaic_server -- --side 1 --config (path_to_config) --threads (num_threads) 
+cargo run --release --bin mosaic_server -- --side 1 
+--config (path_to_config) 
+--network-config (path_to_network_config) --method-config (path_to_method_config) 
+--threads (num_threads)
 ```
 - `client`
 ```
-cargo run --release --bin mosaic_client -- --config (path_to_config)
+cargo run --release --bin mosaic_client -- 
+--config (path_to_config) --network-config (path_to_network_config)
 ```
 - `dealer`
 ```
-cargo run --release --bin mosaic_dealer -- --config (path_to_config) --threads (num_threads)
+cargo run --release --bin mosaic_dealer -- 
+--config (path_to_config) --network-config (path_to_network_config)
+--threads (num_threads)
 ```
 
 Command line parameters:
-- `config`: All four commands need a config parameter, please provide the path to the config file that you prepared in the [Prepare Config](#prepare-the-config-file) section.
+- `config`: All four commands need a config parameter, please provide the path to the main config file that you prepared in the [Prepare Config](#prepare-the-config-file) section.
+- `network-config`: The Mosaic and naive servers need the separate network config file. Use `configs/network_config.json` or point this flag at your own copy.
+- `method-config`: The server method config file. Use `configs/method_config.json` or point this flag at your own copy.
 - `threads`: Specify the number of threads that the two servers and the dealer use.
 Currently we only tested the code for the case when the number of threads used by all these three parties are the same.
 So please set `threads` to be the same in all three commands.
 
 ## Running the naive solution 
 The naive solution only has two servers and a client, since we only implement the naive solution using Garbled Circuit for fuzzy matching.
-You can reuse the config file that you prepared for the Mosaic's solution runs.
+You can reuse the main config file that you prepared for the Mosaic's solution runs, and the same `configs/network_config.json` file.
 - `server0`
 ```
-cargo run --release --bin naive_server -- --side 0 --config (path_to_config) --num-threads (num_threads)
+cargo run --release --bin naive_server -- --side 0 
+--config (path_to_config) --network-config configs/network_config.json --num-threads (num_threads)
 ```
 - `server1`
 ```
-cargo run --release --bin naive_server -- --side 1 --config (path_to_config) --num-threads (num_threads)
+cargo run --release --bin naive_server -- --side 1 --config (path_to_config) --network-config configs/network_config.json --num-threads (num_threads)
 ```
 - `client`
 ```
-cargo run --releas --bin naive_client -- --config (path_to_config)
+cargo run --release --bin naive_client -- --config (path_to_config) --network-config configs/network_config.json
 ```
 
 # Optimizations

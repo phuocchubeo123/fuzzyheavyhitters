@@ -1,0 +1,4 @@
+{
+  "check_method": "FSS",
+  "threshold_method": "GC"
+}

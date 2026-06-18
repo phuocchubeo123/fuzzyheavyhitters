@@ -215,7 +215,7 @@ impl FssDealer {
     }
 
     /// Run the dealer with multiple channels - handle key requests from multiple parallel channels
-    pub fn run_parallel(
+    pub fn run_dealer_parallel(
         &self,
         signal_channels_server0: &mut [CommTrackingChannel],
         signal_channels_server1: &mut [CommTrackingChannel],

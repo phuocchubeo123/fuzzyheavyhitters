@@ -1,6 +1,6 @@
 use crate::{
     fss::{ldcf::LdcfKey, rdcf::RdcfKey},
-    configs::cli_config::ProtocolParameters,
+    configs::{cli_config::ProtocolParameters, method_config::MethodConfig},
 };
 
 /// Method for threshold comparison
@@ -34,16 +34,17 @@ pub struct ThresholdConfig {
     pub method: ThresholdMethod,
 }
 
-impl From<ProtocolParameters> for ThresholdConfig {
-    fn from(config: ProtocolParameters) -> Self {
-        let method = match config.threshold_method.as_str() {
+impl From<(ProtocolParameters, MethodConfig)> for ThresholdConfig {
+    fn from(config: (ProtocolParameters, MethodConfig)) -> Self {
+        let (protocol, methods) = config;
+        let method = match methods.threshold_method.as_str() {
             "GC" => ThresholdMethod::GC,
             "FSS" => ThresholdMethod::FSS,
             other => panic!("Unsupported check method: {}. only support 'GC' and 'FSS'.", other),
         };
 
         ThresholdConfig {
-            h3: config.h3,
+            h3: protocol.h3,
             method,
         }
     }

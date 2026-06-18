@@ -1,5 +1,5 @@
 use clap::Parser;
-use mosaic::{channel::connect_to, configs::cli_config::CliConfig, fuzzy_match::client::Client};
+use mosaic::{channel::{connect_to, CommTrackingChannel}, configs::{cli_config::CliConfig, network_config::NetworkConfig}, fuzzy_match::client::Client};
 use std::fs;
 
 /// Load client points directly from JSON file
@@ -11,8 +11,50 @@ fn load_client_points(file_path: &str) -> Result<Vec<Vec<u128>>, String> {
         .map_err(|e| format!("Failed to parse client points file {}: {}", file_path, e))
 }
 
+
+fn setup_network_client(network_config_path: &str) -> Result<(CommTrackingChannel, CommTrackingChannel), String> {
+    let network_config = NetworkConfig::from_file(network_config_path)?;
+
+    println!("Connecting to servers...");
+    let channel_server0 = connect_to(
+        network_config.server0_addr,
+        network_config.client_to_server0_port,
+    )
+    .map_err(|e| format!("Failed to connect to server 0: {}", e))?;
+    let channel_server1 = connect_to(
+        network_config.server1_addr,
+        network_config.client_to_server1_port,
+    )
+    .map_err(|e| format!("Failed to connect to server 1: {}", e))?;
+
+    Ok((channel_server0, channel_server1))
+}
+
+
+fn print_client_summary(
+    share_time: std::time::Duration,
+    send_time: std::time::Duration,
+    total_time: std::time::Duration,
+    bytes_sent_0: usize,
+    bytes_sent_1: usize,
+) {
+    let total_bytes_sent = bytes_sent_0 + bytes_sent_1;
+
+    println!("Client shares sent successfully");
+    println!("\n=== Client Performance Summary ===");
+    println!("📊 Share generation time: {:.2?}", share_time);
+    println!("📊 Share transmission time: {:.2?}", send_time);
+    println!("📊 Total client time: {:.2?}", total_time);
+    println!("📡 Bytes sent to server 0: {} bytes", bytes_sent_0);
+    println!("📡 Bytes sent to server 1: {} bytes", bytes_sent_1);
+    println!(
+        "📡 Total bytes sent: {} bytes ({:.2} KB)",
+        total_bytes_sent,
+        total_bytes_sent as f64 / 1024.0
+    );
+}
 /// Run as client - generates shares and sends them to servers
-fn run_client(config_path: &str) -> Result<(), String> {
+fn run_client(config_path: &str, network_config_path: &str) -> Result<(), String> {
     let start_time = std::time::Instant::now();
     println!("Starting Client...");
     let cli_config = CliConfig::from_file(config_path)?;
@@ -34,17 +76,7 @@ fn run_client(config_path: &str) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     let share_time = share_start.elapsed();
 
-    println!("Connecting to servers...");
-    let mut channel_server0 = connect_to(
-        cli_config.network.server0_addr,
-        cli_config.network.client_to_server0_port,
-    )
-    .map_err(|e| format!("Failed to connect to server 0: {}", e))?;
-    let mut channel_server1 = connect_to(
-        cli_config.network.server1_addr,
-        cli_config.network.client_to_server1_port,
-    )
-    .map_err(|e| format!("Failed to connect to server 1: {}", e))?;
+    let (mut channel_server0, mut channel_server1) = setup_network_client(network_config_path)?;
 
     // Send shares to both servers
     println!("Sending shares to servers...");
@@ -81,20 +113,13 @@ fn run_client(config_path: &str) -> Result<(), String> {
     // Calculate communication metrics
     let (bytes_sent_0, _) = channel_server0.get_communication_stats();
     let (bytes_sent_1, _) = channel_server1.get_communication_stats();
-    let total_bytes_sent = bytes_sent_0 + bytes_sent_1;
 
-    println!("Client shares sent successfully");
-
-    println!("\n=== Client Performance Summary ===");
-    println!("📊 Share generation time: {:.2?}", share_time);
-    println!("📊 Share transmission time: {:.2?}", send_time);
-    println!("📊 Total client time: {:.2?}", total_time);
-    println!("📡 Bytes sent to server 0: {} bytes", bytes_sent_0);
-    println!("📡 Bytes sent to server 1: {} bytes", bytes_sent_1);
-    println!(
-        "📡 Total bytes sent: {} bytes ({:.2} KB)",
-        total_bytes_sent,
-        total_bytes_sent as f64 / 1024.0
+    print_client_summary(
+        share_time,
+        send_time,
+        total_time,
+        bytes_sent_0,
+        bytes_sent_1,
     );
 
     Ok(())
@@ -105,12 +130,15 @@ fn run_client(config_path: &str) -> Result<(), String> {
 struct Args {
     #[arg(short, long)]
     config: String,
+    #[arg(short, long)]
+    network_config: String,
 }
 
 fn main() {
     let args = Args::parse();
     let config_path = &args.config;
-    let result = run_client(config_path);
+    let network_config_path = &args.network_config;
+    let result = run_client(config_path, network_config_path);
     if let Err(e) = result {
         eprintln!("Error running client: {}", e);
     }

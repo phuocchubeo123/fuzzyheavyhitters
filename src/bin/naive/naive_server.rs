@@ -1,7 +1,7 @@
 use clap::Parser;
 use mosaic::{
     channel::{listen_to, setup_parallel_channels},
-    configs::cli_config::CliConfig,
+    configs::{cli_config::CliConfig, network_config::NetworkConfig},
     fuzzy_match::share_phase_types::DictionaryType,
     naive::protocol::NaiveProtocol,
 };
@@ -16,16 +16,17 @@ fn load_query_points(file_path: &str) -> Result<Vec<Vec<u128>>, String> {
         .map_err(|e| format!("Failed to parse query file {}: {}", file_path, e))
 }
 
-fn run_server(config_path: &str, is_server1: bool, num_threads: usize) -> Result<(), String> {
+fn run_server(config_path: &str, network_config_path: &str, is_server1: bool, num_threads: usize) -> Result<(), String> {
     println!(
         "Starting naive server (side: {})...",
         if is_server1 { "1" } else { "0" }
     );
     let config = CliConfig::from_file(config_path)?;
+    let network_config = NetworkConfig::from_file(network_config_path)?;
     let server_addr = if is_server1 {
-        config.network.server1_addr.clone()
+        network_config.server1_addr.clone()
     } else {
-        config.network.server0_addr.clone()
+        network_config.server0_addr.clone()
     };
 
     let share_config = config.to_share_config()?;
@@ -34,9 +35,9 @@ fn run_server(config_path: &str, is_server1: bool, num_threads: usize) -> Result
     let protocol = NaiveProtocol::new(share_config, is_server1, threshold);
 
     let client_to_server_port = if is_server1 {
-        config.network.client_to_server1_port
+        network_config.client_to_server1_port
     } else {
-        config.network.client_to_server0_port
+        network_config.client_to_server0_port
     };
 
     let mut client_channel = listen_to(server_addr.clone(), client_to_server_port)
@@ -67,8 +68,8 @@ fn run_server(config_path: &str, is_server1: bool, num_threads: usize) -> Result
         client_shares.len()
     );
 
-    let server0_addr = config.network.server0_addr;
-    let server0_to_server1_port = config.network.server0_to_server1_port;
+    let server0_addr = network_config.server0_addr;
+    let server0_to_server1_port = network_config.server0_to_server1_port;
 
     let mut other_server_channels = if is_server1 {
         setup_parallel_channels(true, num_threads, &server0_addr, server0_to_server1_port)
@@ -141,6 +142,8 @@ struct Args {
     #[arg(short, long)]
     config: String,
     #[arg(short, long)]
+    network_config: String,
+    #[arg(short, long)]
     side: u8,
     #[arg(short, long, default_value_t = 2)]
     num_threads: usize,
@@ -149,9 +152,10 @@ struct Args {
 fn main() {
     let args = Args::parse();
     let config_path = &args.config;
+    let network_config_path = &args.network_config;
     let side = args.side == 1;
     let num_threads = args.num_threads;
-    let result = run_server(config_path, side, num_threads);
+    let result = run_server(config_path, network_config_path, side, num_threads);
     if let Err(e) = result {
         eprintln!("Error running server: {}", e);
     }

@@ -1,0 +1,4 @@
+{
+  "check_method": "GC",
+  "threshold_method": "GC"
+}

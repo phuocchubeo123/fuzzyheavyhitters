@@ -5,7 +5,7 @@ use crate::{
         rdcf::RdcfKey,
     },
     fuzzy_match::share_phase::SharePhaseError,
-    configs::cli_config::ProtocolParameters,
+    configs::{cli_config::ProtocolParameters, method_config::MethodConfig},
 };
 
 /// Method for check phase comparison
@@ -51,24 +51,25 @@ pub struct CheckConfig {
     pub method: CheckMethod,
 }
 
-impl From<ProtocolParameters> for CheckConfig {
-    fn from(config: ProtocolParameters) -> Self {
-        let method = match config.check_method.as_str() {
+impl From<(ProtocolParameters, MethodConfig)> for CheckConfig {
+    fn from(config: (ProtocolParameters, MethodConfig)) -> Self {
+        let (protocol, methods) = config;
+        let method = match methods.check_method.as_str() {
             "GC" => CheckMethod::GC,
             "FSS" => CheckMethod::FSS,
             other => panic!("Unsupported check method: {}. only support 'GC' and 'FSS'.", other),
         };
 
-        let property = match config.check_property.as_str() {
+        let property = match protocol.check_property.as_str() {
             "Equality" => CheckProperty::Equality,
             "MuBounded" => CheckProperty::MuBounded,
             other => panic!("Unsupported check property: {}. Only support 'Equality' and 'MuBounded'.", other),
         };
 
         CheckConfig {
-            h2: config.h2,
-            h3: config.h3,
-            d: config.d,
+            h2: protocol.h2,
+            h3: protocol.h3,
+            d: protocol.d,
             property,
             method,
         }
