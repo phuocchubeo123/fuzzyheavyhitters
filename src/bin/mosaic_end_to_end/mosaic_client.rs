@@ -80,7 +80,6 @@ fn print_client_summary(
 }
 /// Run as client - generates shares and sends them to servers
 fn run_client(config_path: &str, network_config_path: &str) -> Result<(), String> {
-    let start_time = std::time::Instant::now();
     println!("Starting Client...");
     let cli_config = CliConfig::from_file(config_path)?;
 
@@ -134,7 +133,7 @@ fn run_client(config_path: &str, network_config_path: &str) -> Result<(), String
         println!("Client sending sketch data took {:.2?}", sketch_start.elapsed());
     }
 
-    let total_time = start_time.elapsed();
+    let total_time = share_creation_time + share_send_time;
 
     // Calculate communication metrics
     let (bytes_sent_0, _) = channel_server0.get_communication_stats();
