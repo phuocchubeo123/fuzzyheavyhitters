@@ -1,6 +1,7 @@
 use clap::Parser;
 use mosaic::{channel::{connect_to, CommTrackingChannel}, configs::{cli_config::CliConfig, network_config::NetworkConfig}, fuzzy_match::client::Client};
 use std::fs;
+use scuttlebutt::channel::AbstractChannel;
 
 /// Load client points directly from JSON file
 fn load_client_points(file_path: &str) -> Result<Vec<Vec<u128>>, String> {
@@ -11,6 +12,30 @@ fn load_client_points(file_path: &str) -> Result<Vec<Vec<u128>>, String> {
         .map_err(|e| format!("Failed to parse client points file {}: {}", file_path, e))
 }
 
+
+fn wait_for_ready_signals(
+    channel_server0: &mut CommTrackingChannel,
+    channel_server1: &mut CommTrackingChannel,
+) -> Result<(), String> {
+    let mut ready0 = [0u8; 2];
+    let mut ready1 = [0u8; 2];
+    channel_server0
+        .read_bytes(&mut ready0)
+        .map_err(|e| format!("Failed to read ready signal from server 0: {}", e))?;
+    channel_server1
+        .read_bytes(&mut ready1)
+        .map_err(|e| format!("Failed to read ready signal from server 1: {}", e))?;
+
+    if &ready0 != b"hi" {
+        return Err(format!("Unexpected ready signal from server 0: {:?}", ready0));
+    }
+    if &ready1 != b"hi" {
+        return Err(format!("Unexpected ready signal from server 1: {:?}", ready1));
+    }
+
+    println!("Client received ready signals from both servers");
+    Ok(())
+}
 
 fn setup_network_client(network_config_path: &str) -> Result<(CommTrackingChannel, CommTrackingChannel), String> {
     let network_config = NetworkConfig::from_file(network_config_path)?;
@@ -66,7 +91,7 @@ fn run_client(config_path: &str, network_config_path: &str) -> Result<(), String
     println!("Loaded {} client points", client_points.len());
 
     // Generate client shares
-    let share_start = std::time::Instant::now();
+    let share_create_start = std::time::Instant::now();
     let share_config = cli_config.to_share_config()?; // Client uses share config
     let enable_sketch = cli_config.protocol.enable_sketch;
     let num_clients = cli_config.protocol.num_clients;
@@ -74,13 +99,14 @@ fn run_client(config_path: &str, network_config_path: &str) -> Result<(), String
     let (shares_server0, shares_server1) = client
         .generate_client_shares(&client_points)
         .map_err(|e| e.to_string())?;
-    let share_time = share_start.elapsed();
+    let share_creation_time = share_create_start.elapsed();
 
     let (mut channel_server0, mut channel_server1) = setup_network_client(network_config_path)?;
+    wait_for_ready_signals(&mut channel_server0, &mut channel_server1)?;
 
     // Send shares to both servers
     println!("Sending shares to servers...");
-    let send_start = std::time::Instant::now();
+    let share_send_start = std::time::Instant::now();
     client
         .send_client_shares(
             shares_server0,
@@ -89,9 +115,9 @@ fn run_client(config_path: &str, network_config_path: &str) -> Result<(), String
             &mut channel_server1,
         )
         .map_err(|e| e.to_string())?;
-    let send_time = send_start.elapsed();
+    let share_send_time = share_send_start.elapsed();
 
-    println!("Client sending PC-FSS keys took {:.2?}", send_time);
+    println!("Client sending PC-FSS keys took {:.2?}", share_send_time);
 
     let sketch_start = std::time::Instant::now();
     if enable_sketch {
@@ -115,8 +141,8 @@ fn run_client(config_path: &str, network_config_path: &str) -> Result<(), String
     let (bytes_sent_1, _) = channel_server1.get_communication_stats();
 
     print_client_summary(
-        share_time,
-        send_time,
+        share_creation_time,
+        share_send_time,
         total_time,
         bytes_sent_0,
         bytes_sent_1,

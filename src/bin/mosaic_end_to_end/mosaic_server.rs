@@ -6,6 +6,7 @@ use mosaic::{
     randomness::prg::PRG,
 };
 use std::fs;
+use scuttlebutt::channel::AbstractChannel;
 
 /// Load query points from JSON file
 fn load_query_points(file_path: &str) -> Result<Vec<Vec<u128>>, String> {
@@ -23,6 +24,17 @@ struct NetworkServerSetup {
     signal_dealer_channels: Vec<CommTrackingChannel>,
     check_dealer_channels: Vec<CommTrackingChannel>,
     threshold_dealer_channels: Vec<CommTrackingChannel>,
+}
+
+fn send_ready_signal(client_channel: &mut CommTrackingChannel, server_id: u8) -> Result<(), String> {
+    client_channel
+        .write_bytes(b"hi")
+        .map_err(|e| format!("Server {}: failed to send ready signal: {}", server_id, e))?;
+    client_channel
+        .flush()
+        .map_err(|e| format!("Server {}: failed to flush ready signal: {}", server_id, e))?;
+    println!("Server {}: sent ready signal to client", server_id);
+    Ok(())
 }
 
 fn setup_network_server(
@@ -45,7 +57,7 @@ fn setup_network_server(
         network_config.client_to_server0_port
     };
 
-    let client_channel = listen_to(server_addr.clone(), client_to_server_port)
+    let mut client_channel = listen_to(server_addr.clone(), client_to_server_port)
         .map_err(|e| format!("Failed to listen for client connection: {}", e))?;
 
     let server0_addr = &network_config.server0_addr;
@@ -105,6 +117,8 @@ fn setup_network_server(
         check_dealer_channels.len(),
         threshold_dealer_channels.len()
     );
+
+    send_ready_signal(&mut client_channel, server_id)?;
 
     Ok(NetworkServerSetup {
         client_channel,
