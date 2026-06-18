@@ -80,7 +80,22 @@ In the following table, we provide suggested $h_2$ parameter in the FSS-based ap
 
 </div>
 
-- _OKVS-based_ approach: Choosing $h_2$ for the OKVS-based approach is more tricky due to the correctness probability. TODO
+- _OKVS-based_ approach: Choosing $h_2$ for the OKVS-based approach is more tricky due to the correctness probability. 
+For keys that are not encoded in the OKVS, the decoding output is a random value, and with a small probability, the summed-up distance would still indicate that $d(x, y) \le \delta$ (which is wrong).
+For example, when the output range is $2^{h_2}$, and we consider the distance metric $L_2$, with radius $\delta = 5$, the random summed-up distance can be a false-positive with probability $5^2 / 2^{h_2}$.
+We further union-bound this probability with the total number of times that an OKVS is evaluated, which we estimate to be the number of clients.
+Again, in the $L_2$ distance metric example, this probability would be estimated as $5^2 n / 2^{h_2}$, and we choose $h_2 \ge \log(25 n) + \kappa$ to satisfy the statistical security parameter.
+The full table for the parameter $h_2$ that we chose for the experiments is shown below.
+
+<div align="center">
+
+| distance metric | $L_{\infty}$ | $L_1$ | $L_2$ |
+| --- | ---: | ---: | ---:|
+| $n = 21,581$ | $h_2 = 55$ | $h_2 = 58$ | $h_2 = 60$ |
+| $n = 59,040$ | $h_2 = 56$ | $h_2 = 59$ | $h_2 = 61$ |
+| $n = 115,174$ | $h_2 = 58$ | $h_2 = 61$ | $h_2 = 63$ |
+
+</div>
 
 4. **Fuzzy match output** $h_3$: The fuzzy match output is a mod $2^{h_3}$ value, but with value being only either $0$ (if $d(x, y)$ exceeds $\delta$, which means the two points are not close, hence not a fuzzy match) or $1$.
 For each point $x$ in consideration, it is fuzzy-matched with exactly $n$ other points $y$, where $n$ is the number of clients, hence aggregating the results return a value that does not exceed $n$.
@@ -220,7 +235,7 @@ cargo run --release --bin mosaic_client -- --config (path_to_config)
 ```
 - `dealer`
 ```
-cargo run --release --bin mosaic_dealer --config (path_to_config) --threads (num_threads)
+cargo run --release --bin mosaic_dealer -- --config (path_to_config) --threads (num_threads)
 ```
 
 Command line parameters:
@@ -244,6 +259,18 @@ cargo run --release --bin naive_server -- --side 1 --config (path_to_config) --n
 ```
 cargo run --releas --bin naive_client -- --config (path_to_config)
 ```
+
+# Optimizations
+Since the time of publication, there has been two optimizations that makes the code run much faster now and also consumes less RAM. 
+
+1. In the original code, we in fact forgot to parallelize the _FSS evaluation_ step in each loop iteration. 
+Putting parallelization in this part reduces $8\times$ the running time compared to what was shown in Table 4 in the submission.
+
+2. The original code stores every FSS evaluations in each iteration of the loop, with the goal in mind to be faster FSS evaluation for the next prefix. 
+However, later in the run, the number of candidate prefixes grows into a large number, which causes the amount of FSS evaluations stored in RAM becoming to large ($>140$ GB).
+In this new version, we implement the binary tree expansion in a more "streaming" fashion, which reduces the peak memory consumption into less $30$ GB. 
+This implementation also introduces a trade-off, with more RAM consumption might be traded for even faster runs.
+
 
 # Authors
 Gayathri Garimella, _Brown University_

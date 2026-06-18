@@ -538,6 +538,193 @@ impl MosaicProtocol {
         Ok(final_heavy_hitters)
     }
 
+
+    /// Chunked-memory variant of run_server_unknown_dictionary_parallel.
+    pub fn run_server_unknown_dictionary_parallel2(
+        &self,
+        client_shares_list: &[SharedRange],
+        signal_dealer_channels: &mut [CommTrackingChannel],
+        check_dealer_channels: &mut [CommTrackingChannel],
+        threshold_dealer_channels: &mut [CommTrackingChannel],
+        other_server_channels: &mut [CommTrackingChannel],
+    ) -> Result<Vec<Vec<u128>>, String> {
+        if client_shares_list.is_empty() {
+            println!("No client shares available; skipping unknown dictionary protocol.");
+            return Ok(Vec::new());
+        }
+
+        struct TraversalState {
+            data: Vec<Vec<u8>>,
+            prefix: Vec<Vec<bool>>,
+            prefix_length: usize,
+            dim: usize,
+        }
+
+        let max_bit_length = self.h1();
+        let dimension = self.d();
+        let eval_len = self.h2();
+        let eval_modulus = 1u128 << eval_len;
+        let num_threads = other_server_channels.len().max(1);
+        let expansion_window = (num_threads * 4).max(1);
+
+        let empty_string_data = client_shares_list
+            .iter()
+            .map(|shared_range| {
+                let data = self.share_phase.share_data_init(shared_range).unwrap();
+                data.to_bytes(eval_len)
+            })
+            .collect::<Result<Vec<Vec<u8>>, _>>()
+            .map_err(|e| e.to_string())?;
+        let mut current_data = vec![TraversalState {
+            data: empty_string_data,
+            prefix: vec![vec![]; dimension],
+            prefix_length: 0,
+            dim: 0,
+        }];
+        let mut final_prefixes: Vec<Vec<Vec<bool>>> = Vec::new();
+
+        while !current_data.is_empty() {
+            let start = std::time::Instant::now();
+            let split_at = current_data.len().saturating_sub(expansion_window);
+            let expand_states = current_data.split_off(split_at);
+
+            let expanded_states = expand_states
+                .par_iter()
+                .map(|state| {
+                    let mut data0 = Vec::with_capacity(client_shares_list.len());
+                    let mut data1 = Vec::with_capacity(client_shares_list.len());
+                    for (idx, shared_range) in client_shares_list.iter().enumerate() {
+                        let (data_dim, _) =
+                            ShareData::from_bytes(&state.data[idx], eval_len, eval_modulus)
+                                .map_err(|e| e.to_string())?;
+
+                        let (eval0, eval1) = self
+                            .share_phase
+                            .expand_prefix(shared_range, &data_dim, &state.prefix[state.dim], state.dim)
+                            .map_err(|e| e.to_string())?;
+
+                        data0.push(eval0.to_bytes(eval_len).map_err(|e| e.to_string())?);
+                        data1.push(eval1.to_bytes(eval_len).map_err(|e| e.to_string())?);
+                    }
+
+                    let next_dim = (state.dim + 1) % dimension;
+                    let next_prefix_length = state.prefix_length + usize::from(next_dim == 0);
+
+                    let mut prefix0 = state.prefix.clone();
+                    prefix0[state.dim].push(false);
+                    let mut prefix1 = state.prefix.clone();
+                    prefix1[state.dim].push(true);
+
+                    Ok::<_, String>([
+                        TraversalState {
+                            data: data0,
+                            prefix: prefix0,
+                            prefix_length: next_prefix_length,
+                            dim: next_dim,
+                        },
+                        TraversalState {
+                            data: data1,
+                            prefix: prefix1,
+                            prefix_length: next_prefix_length,
+                            dim: next_dim,
+                        },
+                    ])
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let mut new_states = Vec::with_capacity(expanded_states.len() * 2);
+            for pair in expanded_states {
+                new_states.extend(pair);
+            }
+
+            println!("Time to collect new data: {:?}", start.elapsed());
+            println!("Number of new states stored in chunk: {}", new_states.len());
+            println!(
+                "Memory consumption of chunk new_data: {:?} bytes",
+                new_states
+                    .iter()
+                    .map(|state| state.data.iter().map(|b| b.len()).sum::<usize>())
+                    .sum::<usize>()
+            );
+
+            crate::util::print_memory_usage();
+
+            let new_eval = new_states
+                .par_iter()
+                .map(|state| {
+                    state
+                        .data
+                        .iter()
+                        .map(|bytes| {
+                            let (share_data, _) = ShareData::from_bytes(bytes, eval_len, eval_modulus)
+                                .map_err(|e| e.to_string())?;
+                            let evals = match share_data {
+                                ShareData::OKVS { eval } => eval,
+                                ShareData::IntervalFSS { data } => data
+                                    .iter()
+                                    .map(|eval| eval.result()[0])
+                                    .collect::<Vec<u128>>(),
+                                ShareData::DistanceFSS { eval, .. } => eval,
+                            };
+                            Ok(evals)
+                        })
+                        .collect::<Result<Vec<Vec<u128>>, String>>()
+                })
+                .collect::<Result<Vec<Vec<Vec<u128>>>, String>>()?;
+
+            let exceeds_threshold_results = self.batch_check(
+                &new_eval,
+                signal_dealer_channels,
+                check_dealer_channels,
+                threshold_dealer_channels,
+                other_server_channels,
+            )?;
+
+            for (state, &exceed) in new_states.iter_mut().zip(exceeds_threshold_results.iter()) {
+                if !exceed {
+                    continue;
+                }
+
+                if state.prefix_length == max_bit_length {
+                    final_prefixes.push(std::mem::take(&mut state.prefix));
+                } else {
+                    current_data.push(TraversalState {
+                        data: std::mem::take(&mut state.data),
+                        prefix: std::mem::take(&mut state.prefix),
+                        prefix_length: state.prefix_length,
+                        dim: state.dim,
+                    });
+                }
+            }
+
+            println!(
+                "Processed frontier chunk with {} survivors and {} finals in {:?}",
+                current_data.len(),
+                final_prefixes.len(),
+                start.elapsed()
+            );
+        }
+
+        let final_heavy_hitters = final_prefixes
+            .into_iter()
+            .map(|prefix| {
+                prefix
+                    .iter()
+                    .map(|bits| {
+                        bits.iter()
+                            .fold(0u128, |acc, &bit| (acc << 1) | if bit { 1 } else { 0 })
+                    })
+                    .collect::<Vec<u128>>()
+            })
+            .collect();
+
+        for dealer_channel in signal_dealer_channels.iter_mut() {
+            shutdown_dealer(dealer_channel)?;
+        }
+
+        Ok(final_heavy_hitters)
+    }
+
     fn batch_check(
         &self,
         current_eval: &[Vec<Vec<u128>>],

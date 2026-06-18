@@ -256,7 +256,7 @@ fn run_server(config_path: &str, is_server1: bool, num_threads: usize) -> Result
         );
 
         // Run the protocol for unknown dictionary
-        let heavy_hitters = protocol.run_server_unknown_dictionary_parallel(
+        let heavy_hitters = protocol.run_server_unknown_dictionary_parallel2(
             &shares,
             &mut signal_dealer_channels,
             &mut check_dealer_channels,
