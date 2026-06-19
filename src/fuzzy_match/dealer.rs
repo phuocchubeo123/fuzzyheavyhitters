@@ -470,10 +470,10 @@ impl FssDealer {
                                         random_values: current_keys.2.iter().map(|(_, r1)| r1.clone()).collect(),
                                     };
 
-                                    self.write_equality_key_batch(&mut *check_channel_server0, &batch_server0)
+                                    self.write_equality_key_batch(&mut *signal_channel_server0, &batch_server0)
                                         .map_err(|e| format!("Failed to send keys to server 0 on channel {}: {}", channel_idx, e))?;
 
-                                    self.write_equality_key_batch(&mut *check_channel_server1, &batch_server1)
+                                    self.write_equality_key_batch(&mut *signal_channel_server1, &batch_server1)
                                         .map_err(|e| format!("Failed to send keys to server 1 on channel {}: {}", channel_idx, e))?;
 
                                     self.fill_fss_keys_for_equality(
@@ -503,10 +503,10 @@ impl FssDealer {
                                         random_values: current_keys.2.iter().map(|(_, r1)| *r1).collect(),
                                     };
 
-                                    self.write_check_key_batch(&mut *check_channel_server0, &batch_server0)
+                                    self.write_check_key_batch(&mut *signal_channel_server0, &batch_server0)
                                         .map_err(|e| format!("Failed to send keys to server 0 on channel {}: {}", channel_idx, e))?;
 
-                                    self.write_check_key_batch(&mut *check_channel_server1, &batch_server1)
+                                    self.write_check_key_batch(&mut *signal_channel_server1, &batch_server1)
                                         .map_err(|e| format!("Failed to send keys to server 1 on channel {}: {}", channel_idx, e))?;
 
                                     self.fill_fss_keys_for_check(
@@ -530,10 +530,10 @@ impl FssDealer {
                                         random_values: random_pairs.iter().map(|(_, r1)| *r1).collect(),
                                     };
 
-                                    self.write_threshold_key_batch(&mut *threshold_channel_server0, &batch_server0)
+                                    self.write_threshold_key_batch(&mut *signal_channel_server0, &batch_server0)
                                         .map_err(|e| format!("Failed to send threshold keys to server 0 on channel {}: {}", channel_idx, e))?;
 
-                                    self.write_threshold_key_batch(&mut *threshold_channel_server1, &batch_server1)
+                                    self.write_threshold_key_batch(&mut *signal_channel_server1, &batch_server1)
                                         .map_err(|e| format!("Failed to send threshold keys to server 1 on channel {}: {}", channel_idx, e))?;
 
                                     self.fill_fss_keys_for_threshold(

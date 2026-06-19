@@ -1173,13 +1173,13 @@ pub fn request_dealer_check(
 
     // Receive FSS key batch from dealer
     let mut len_bytes = [0u8; 8];
-    check_dealer_channel
+    signal_dealer_channel
         .read_bytes(&mut len_bytes)
         .map_err(|e| format!("Failed to read key batch length: {}", e))?;
     let len = u64::from_le_bytes(len_bytes) as usize;
 
     let mut batch_data = vec![0u8; len];
-    check_dealer_channel
+    signal_dealer_channel
         .read_bytes(&mut batch_data)
         .map_err(|e| format!("Failed to read key batch data: {}", e))?;
 
@@ -1211,13 +1211,13 @@ pub fn request_dealer_equality(
 
     // Receive FSS key batch from dealer
     let mut len_bytes = [0u8; 8];
-    check_dealer_channel
+    signal_dealer_channel
         .read_bytes(&mut len_bytes)
         .map_err(|e| anyhow!("Failed to read key batch length: {}", e))?;
     let len = u64::from_le_bytes(len_bytes) as usize;
 
     let mut batch_data = vec![0u8; len];
-    check_dealer_channel
+    signal_dealer_channel
         .read_bytes(&mut batch_data)
         .map_err(|e| anyhow!("Failed to read key batch data: {}", e))?;
 
@@ -1247,13 +1247,13 @@ pub fn request_dealer_threshold(
 
     // Receive FSS key batch from dealer
     let mut len_bytes = [0u8; 8];
-    threshold_dealer_channel
+    signal_dealer_channel
         .read_bytes(&mut len_bytes)
         .map_err(|e| format!("Failed to read key batch length: {}", e))?;
     let len = u64::from_le_bytes(len_bytes) as usize;
 
     let mut batch_data = vec![0u8; len];
-    threshold_dealer_channel
+    signal_dealer_channel
         .read_bytes(&mut batch_data)
         .map_err(|e| format!("Failed to read key batch data: {}", e))?;
 
