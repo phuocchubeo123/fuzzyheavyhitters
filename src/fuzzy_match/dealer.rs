@@ -557,6 +557,9 @@ impl FssDealer {
             )
             .map_err(|e| e.to_string())?;
 
+            println!("key01 stack size: {}", std::mem::size_of_val(&key01));
+            println!("key01 serialized size: {}", key01.to_bytes().unwrap().len());
+
                 key_pairs.push(((key00, key01), (key10, key11)));
             } else {
                 // No wrap-around case: interval [r0+r1, distance_threshold+r0+r1]
