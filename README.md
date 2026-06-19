@@ -53,6 +53,25 @@ In Mosaic, the model we follow is:
 
 # Experimental Results
 
+## Machine
+All experiments are run on AWS EC2 instances. 
+We simulate the clients with a **t2.2xlarge** instance, which means the computation power for the clients is also weak. 
+The two servers and the dealer, each is simulated with a **c5a.24xlarge** instance. 
+Each run from the servers and the dealer is parallelized through $32$ cores.
+Currently, we only have experiments in the LAN setting.
+
+## Small-scale runs
+We first run Mosaic with every possible combination of methods in client sharing, fuzzy match, and threshold comparison. 
+In total, the number of combinations is $2\times2\times2 = 8$ options per distance metric. 
+We run the experiments for $3$ different distance metrics: $L_{\infty}, L_1, L_2$.
+The experiments are run on the **busiest_day** sub-dataset. 
+Based on the results of the small-scale runs, we choose some options that take the smallest amount of time to run for the larger sub-datasets.
+
+## Large-scale runs
+We choose to run only options with Garbled Circuits for both distance checking and threshold comparison for the larger dataset: **busiest_week** and **busiest_month**.
+
+_Remarks_: There is in fact a stalling bug when we run for $32$ cores, for the **busiest_week** sub-dataset, with OKVS as the function secret sharing option and using FSS for both distance checking and threshold comparison, that we currently do not know how to investigate, as it only happens at large scale. Please try to run this experiment if you have the setup, and don't be hesitate to contact us about the bug.
+
 ## Parameters
 We choose computational security parameter $\kappa = 128$ and statistical security parameters $\lambda = 40$. 
 
