@@ -3,6 +3,7 @@ use crate::{
     data_structures::mod2k::Mod2k,
     fss::{dpf::DpfKey, ldcf::LdcfKey, rdcf::RdcfKey},
     fuzzy_match::{
+        dealer::SerializedFssKey,
         share_phase::SharePhaseError,
         check_phase_types::{CheckConfig, CheckData, CheckMethod, CheckProperty, CheckPhaseError},
     },
@@ -341,7 +342,7 @@ impl CheckPhase {
     pub fn batch_mu_bounded_testing_fss(
         &self,
         inputs: &[Mod2k],
-        fss_keys: &[(LdcfKey, RdcfKey)],
+        fss_keys: &[SerializedFssKey],
         random_values: &[Mod2k],
         channel: &mut CommTrackingChannel,
     ) -> Result<Vec<Mod2k>, CheckPhaseError> {
@@ -407,7 +408,12 @@ impl CheckPhase {
         let results = combined_masked_values
             .iter()
             .zip(fss_keys.iter())
-            .map(|(masked_value, (fss_key0, fss_key1))| -> Result<Mod2k, CheckPhaseError> {
+            .map(|(masked_value, (fss_key0_bytes, fss_key1_bytes))| -> Result<Mod2k, CheckPhaseError> {
+                let (fss_key0, _) = LdcfKey::from_bytes(fss_key0_bytes, out_modulus)
+                    .map_err(|e| CheckPhaseError::InvalidConfig(format!("Failed to deserialize LDCF key: {}", e)))?;
+                let (fss_key1, _) = RdcfKey::from_bytes(fss_key1_bytes, out_modulus)
+                    .map_err(|e| CheckPhaseError::InvalidConfig(format!("Failed to deserialize RDCF key: {}", e)))?;
+
                 let masked_value_bits = u128_to_bits_msb(masked_value.val(), self.config.h2);
                 let fss_ldcf = fss_key0
                     .eval_ldcf(&masked_value_bits, out_modulus)

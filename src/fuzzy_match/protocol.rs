@@ -8,7 +8,7 @@ use crate::{
     data_structures::modp::{Modp, BarrettCtx},
     configs::{cli_config::ProtocolParameters, method_config::MethodConfig},
     fuzzy_match::{
-        dealer::{DealerSignal, DpfKeyBatch, FssKeyBatch},
+        dealer::{DealerSignal, DpfKeyBatch, FssKeyBatch, SerializedFssKeyBatch},
         share_phase::SharePhase,
         share_phase_types::{DistanceMetric, ShareMethod},
         shared_range::{ShareData, SharedRange},
@@ -1155,8 +1155,8 @@ fn flatten_verify_values<'a>(
 pub fn request_dealer_check(
     signal_dealer_channel: &mut CommTrackingChannel,
     check_dealer_channel: &mut CommTrackingChannel,
-    modulus: u128,
-) -> Result<FssKeyBatch, String> {
+    _modulus: u128,
+) -> Result<SerializedFssKeyBatch, String> {
     // Send DealerSignal using custom serialization
     let signal = DealerSignal::RequestCheckKeys;
     let signal_bytes = signal.to_bytes();
@@ -1183,9 +1183,10 @@ pub fn request_dealer_check(
         .read_bytes(&mut batch_data)
         .map_err(|e| format!("Failed to read key batch data: {}", e))?;
 
-    // Use output modulus from threshold config for deserialization
+    // Receive serialized check keys from dealer without deserializing the individual keys yet
     let (fss_key_batch, _) =
-        FssKeyBatch::from_bytes(&batch_data, modulus).expect("Failed to deserialize FssKeyBatch");
+        SerializedFssKeyBatch::from_bytes(&batch_data)
+            .expect("Failed to deserialize SerializedFssKeyBatch");
     Ok(fss_key_batch)
 }
 
@@ -1257,9 +1258,10 @@ pub fn request_dealer_threshold(
         .read_bytes(&mut batch_data)
         .map_err(|e| format!("Failed to read key batch data: {}", e))?;
 
-    // Use output modulus from threshold config for deserialization
+    // Deserialize threshold keys immediately, as before
     let (fss_key_batch, _) =
-        FssKeyBatch::from_bytes(&batch_data, modulus).expect("Failed to deserialize FssKeyBatch");
+        FssKeyBatch::from_bytes(&batch_data, modulus)
+            .map_err(|e| format!("Failed to deserialize FssKeyBatch for threshold testing from dealer: {}", e))?;
     Ok(fss_key_batch)
 }
 

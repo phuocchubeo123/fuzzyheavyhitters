@@ -18,7 +18,89 @@ use rayon::prelude::*;
 use scuttlebutt::AbstractChannel;
 use std::convert::TryInto;
 
-/// FSS key batch for check phase - contains keys for one server
+/// FSS key batch for check phase - contains serialized keys for one server
+pub type SerializedFssKey = (Vec<u8>, Vec<u8>);
+
+#[derive(Clone, Debug)]
+pub struct SerializedFssKeyBatch {
+    pub keys: Vec<SerializedFssKey>,
+    pub random_values: Vec<u128>,
+}
+
+impl SerializedFssKeyBatch {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, String> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&(self.keys.len() as u32).to_le_bytes());
+        for (k0_bytes, k1_bytes) in &self.keys {
+            out.extend_from_slice(&(k0_bytes.len() as u32).to_le_bytes());
+            out.extend_from_slice(k0_bytes);
+            out.extend_from_slice(&(k1_bytes.len() as u32).to_le_bytes());
+            out.extend_from_slice(k1_bytes);
+        }
+        out.extend_from_slice(&(self.random_values.len() as u32).to_le_bytes());
+        for v in &self.random_values {
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        Ok(out)
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<(Self, usize), String> {
+        if bytes.len() < 4 {
+            return Err("Too short for SerializedFssKeyBatch keys len".to_string());
+        }
+        let mut offset = 0;
+        let key_count = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+        offset += 4;
+        let mut keys = Vec::with_capacity(key_count);
+        for _ in 0..key_count {
+            if bytes[offset..].len() < 4 {
+                return Err("Too short for serialized LDCF key length".to_string());
+            }
+            let k0_len = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+            offset += 4;
+            if bytes[offset..].len() < k0_len {
+                return Err("Too short for serialized LDCF key bytes".to_string());
+            }
+            let k0_bytes = bytes[offset..offset + k0_len].to_vec();
+            offset += k0_len;
+            if bytes[offset..].len() < 4 {
+                return Err("Too short for serialized RDCF key length".to_string());
+            }
+            let k1_len = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+            offset += 4;
+            if bytes[offset..].len() < k1_len {
+                return Err("Too short for serialized RDCF key bytes".to_string());
+            }
+            let k1_bytes = bytes[offset..offset + k1_len].to_vec();
+            offset += k1_len;
+            keys.push((k0_bytes, k1_bytes));
+        }
+        if bytes[offset..].len() < 4 {
+            return Err("Too short for SerializedFssKeyBatch random_values len".to_string());
+        }
+        let val_count = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+        offset += 4;
+        let mut random_values = Vec::with_capacity(val_count);
+        for _ in 0..val_count {
+            if bytes[offset..].len() < 16 {
+                return Err("Too short for u128 in SerializedFssKeyBatch".to_string());
+            }
+            random_values.push(u128::from_le_bytes(
+                bytes[offset..offset + 16].try_into().unwrap(),
+            ));
+            offset += 16;
+        }
+        Ok((
+            SerializedFssKeyBatch {
+                keys,
+                random_values,
+            },
+            offset,
+        ))
+    }
+}
+
+/// FSS key batch for threshold/equality phases - contains deserialized keys
 #[derive(Clone, Debug)]
 pub struct FssKeyBatch {
     pub keys: Vec<(LdcfKey, RdcfKey)>,
@@ -303,12 +385,12 @@ impl FssDealer {
                                     };
 
                                     // Send keys to both servers on this channel
-                                    let batch_server0 = FssKeyBatch {
+                                    let batch_server0 = SerializedFssKeyBatch {
                                         keys: keys0,
                                         random_values: random_pairs.iter().map(|(r0, _)| *r0).collect(),
                                     };
 
-                                    let batch_server1 = FssKeyBatch {
+                                    let batch_server1 = SerializedFssKeyBatch {
                                         keys: keys1,
                                         random_values: random_pairs.iter().map(|(_, r1)| *r1).collect(),
                                     };
@@ -421,11 +503,10 @@ impl FssDealer {
     pub fn write_check_key_batch(
         &self,
         channel: &mut CommTrackingChannel,
-        batch: &FssKeyBatch,
+        batch: &SerializedFssKeyBatch,
     ) -> Result<(), String> {
         let data = batch.to_bytes()?;
         let len_bytes = (data.len() as u64).to_le_bytes();
-        // println!("Writing FSS key batch of size {} bytes to channel", data.len());
         channel
             .write_bytes(&len_bytes)
             .map_err(|e| format!("Failed to write length: {}", e))?;
@@ -502,8 +583,8 @@ impl FssDealer {
         &self,
     ) -> Result<
         (
-            Vec<(LdcfKey, RdcfKey)>,
-            Vec<(LdcfKey, RdcfKey)>,
+            Vec<SerializedFssKey>,
+            Vec<SerializedFssKey>,
             Vec<(u128, u128)>,
         ),
         String,
@@ -522,7 +603,7 @@ impl FssDealer {
         }
 
         // Generate FSS keys (sequential for clarity with error handling)
-        let mut key_pairs: Vec<((LdcfKey, RdcfKey), (LdcfKey, RdcfKey))> =
+        let mut key_pairs: Vec<(SerializedFssKey, SerializedFssKey)> =
             Vec::with_capacity(random_pairs.len());
         for &(r0, r1) in random_pairs.iter() {
             // Check if distance_threshold + r0 + r1 would wrap around
@@ -549,16 +630,18 @@ impl FssDealer {
                 )
                 .map_err(|e| e.to_string())?;
 
-            let (key01, key11) = RdcfKey::gen_rdcf_key(
-                &beta_bits,
-                &zero_payload,
-                &one_payload,
-                out_modulus,
-            )
-            .map_err(|e| e.to_string())?;
+                let (key01, key11) = RdcfKey::gen_rdcf_key(
+                    &beta_bits,
+                    &zero_payload,
+                    &one_payload,
+                    out_modulus,
+                )
+                .map_err(|e| e.to_string())?;
 
-            println!("key01 stack size: {}", std::mem::size_of_val(&key01));
-            println!("key01 serialized size: {}", key01.to_bytes().unwrap().len());
+                let key00 = key00.to_bytes().map_err(|e| e.to_string())?;
+                let key01 = key01.to_bytes().map_err(|e| e.to_string())?;
+                let key10 = key10.to_bytes().map_err(|e| e.to_string())?;
+                let key11 = key11.to_bytes().map_err(|e| e.to_string())?;
 
                 key_pairs.push(((key00, key01), (key10, key11)));
             } else {
@@ -578,13 +661,18 @@ impl FssDealer {
                 )
                 .map_err(|e| e.to_string())?;
 
-            let (key01, key11) = RdcfKey::gen_rdcf_key(
-                &beta_bits,
-                &zero_payload,
-                &(zero_payload.clone() - one_payload.clone()),
-                out_modulus,
-            )
-            .map_err(|e| e.to_string())?;
+                let (key01, key11) = RdcfKey::gen_rdcf_key(
+                    &beta_bits,
+                    &zero_payload,
+                    &(zero_payload.clone() - one_payload.clone()),
+                    out_modulus,
+                )
+                .map_err(|e| e.to_string())?;
+
+                let key00 = key00.to_bytes().map_err(|e| e.to_string())?;
+                let key01 = key01.to_bytes().map_err(|e| e.to_string())?;
+                let key10 = key10.to_bytes().map_err(|e| e.to_string())?;
+                let key11 = key11.to_bytes().map_err(|e| e.to_string())?;
 
                 key_pairs.push(((key00, key01), (key10, key11)));
             }

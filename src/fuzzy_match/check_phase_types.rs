@@ -1,10 +1,9 @@
 use crate::{
-    fss::{
-        dpf::DpfKey, 
-        ldcf::LdcfKey,
-        rdcf::RdcfKey,
+    fss::dpf::DpfKey,
+    fuzzy_match::{
+        dealer::SerializedFssKey,
+        share_phase::SharePhaseError,
     },
-    fuzzy_match::share_phase::SharePhaseError,
     configs::{cli_config::ProtocolParameters, method_config::MethodConfig},
 };
 
@@ -36,7 +35,7 @@ pub enum CheckData {
     },
     /// FSS key, random value, and threshold for Lp distance comparison with IntervalFSS
     LpIntervalFSS {
-        fss_key: (LdcfKey, RdcfKey),
+        fss_key: SerializedFssKey,
         random_value: u128,
     },
 }

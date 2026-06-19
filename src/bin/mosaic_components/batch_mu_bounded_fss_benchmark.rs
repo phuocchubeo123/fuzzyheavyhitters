@@ -7,7 +7,7 @@ use mosaic::{
     fuzzy_match::{
         check_phase::CheckPhase,
         check_phase_types::{CheckConfig, CheckMethod, CheckProperty},
-        dealer::{FssDealer, FssKeyBatch},
+        dealer::{FssDealer, SerializedFssKeyBatch},
         protocol::request_dealer_check,
     },
 };
@@ -55,11 +55,11 @@ fn run_dealer_benchmark(config_path: &str) -> Result<(), Box<dyn std::error::Err
     println!("Time to generate FSS keys: {:?}", start_time.elapsed());
 
     let start_time = Instant::now();
-    let batch_server0 = FssKeyBatch {
+    let batch_server0 = SerializedFssKeyBatch {
         keys: server0_keys,
         random_values: random_pairs.iter().map(|(r0, _)| r0.clone()).collect(),
     };
-    let batch_server1 = FssKeyBatch {
+    let batch_server1 = SerializedFssKeyBatch {
         keys: server1_keys,
         random_values: random_pairs.iter().map(|(_, r1)| r1.clone()).collect(),
     };
