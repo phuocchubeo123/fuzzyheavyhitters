@@ -9,7 +9,7 @@ fi
 
 mkdir -p results
 
-BUSIESTS=(day week month)
+BUSIESTS=(week month)
 SHARES=(fss okvs)
 METHODS=(gc_gc gc_fss fss_gc fss_fss)
 METRICS=(linf l1 l2)
