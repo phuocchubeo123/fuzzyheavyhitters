@@ -326,7 +326,7 @@ impl FssDealer {
             ));
         }
 
-        println!("Generated initial FSS keys, dealer ready");
+        println!("Dealer ready");
 
         // Process each channel pair in parallel - each gets its own persistent thread
         (signal_channels_server0.par_iter_mut().zip(signal_channels_server1.par_iter_mut()))
@@ -334,10 +334,6 @@ impl FssDealer {
             .zip(threshold_channels_server0.par_iter_mut().zip(threshold_channels_server1.par_iter_mut()))
             .enumerate()
             .try_for_each(|(channel_idx, (((signal_channel_server0, signal_channel_server1), (check_channel_server0, check_channel_server1)), (threshold_channel_server0, threshold_channel_server1)))| {
-                let mut equality_keys = self.generate_fss_keys_for_equality().expect("Failed to generate equality keys");
-                let mut check_keys = self.generate_fss_keys_for_check().expect("Failed to generate check keys");
-                let mut threshold_keys = self.generate_fss_keys_for_threshold().expect("Failed to generate threshold keys");
-
                 // Each channel pair runs in its own persistent loop
                 loop {
                     let server0_signal = self.read_dealer_signal(&mut *signal_channel_server0);
@@ -354,10 +350,9 @@ impl FssDealer {
                         Ok(signal) => {
                             match signal {
                                 DealerSignal::RequestEqualityKeys => {
-                                    let (keys0, keys1, random_pairs) = {
-                                        let current_keys = equality_keys.clone();
-                                        current_keys
-                                    };
+                                    let (keys0, keys1, random_pairs) = self
+                                        .generate_fss_keys_for_equality()
+                                        .map_err(|e| format!("Failed to generate equality keys: {}", e))?;
 
                                     let batch_server0 = DpfKeyBatch {
                                         keys: keys0,
@@ -374,17 +369,12 @@ impl FssDealer {
 
                                     self.write_equality_key_batch(&mut *check_channel_server1, &batch_server1)
                                         .map_err(|e| format!("Failed to send keys to server 1 on channel {}: {}", channel_idx, e))?;
-
-                                    equality_keys = self.generate_fss_keys_for_equality().map_err(|e| format!("Failed to generate equality keys: {}", e))?;
                                 }
                                 DealerSignal::RequestCheckKeys => {
-                                    // Get current keys and generate new ones
-                                    let (keys0, keys1, random_pairs) = {
-                                        let current_keys = check_keys.clone();
-                                        current_keys
-                                    };
+                                    let (keys0, keys1, random_pairs) = self
+                                        .generate_fss_keys_for_check()
+                                        .map_err(|e| format!("Failed to generate check keys: {}", e))?;
 
-                                    // Send keys to both servers on this channel
                                     let batch_server0 = SerializedFssKeyBatch {
                                         keys: keys0,
                                         random_values: random_pairs.iter().map(|(r0, _)| *r0).collect(),
@@ -395,24 +385,17 @@ impl FssDealer {
                                         random_values: random_pairs.iter().map(|(_, r1)| *r1).collect(),
                                     };
 
-                                    // Send to server 0 on this channel
                                     self.write_check_key_batch(&mut *check_channel_server0, &batch_server0)
                                         .map_err(|e| format!("Failed to send keys to server 0 on channel {}: {}", channel_idx, e))?;
 
-                                    // Send to server 1 on this channel
                                     self.write_check_key_batch(&mut *check_channel_server1, &batch_server1)
                                         .map_err(|e| format!("Failed to send keys to server 1 on channel {}: {}", channel_idx, e))?;
-
-                                    check_keys = self.generate_fss_keys_for_check().map_err(|e| format!("Failed to generate check keys: {}", e))?;
                                 }
                                 DealerSignal::RequestThresholdKeys => {
-                                    // Get current keys
-                                    let (keys0, keys1, random_pairs) = {
-                                        let current_keys = threshold_keys.clone();
-                                        current_keys
-                                    };
+                                    let (keys0, keys1, random_pairs) = self
+                                        .generate_fss_keys_for_threshold()
+                                        .map_err(|e| format!("Failed to generate threshold keys: {}", e))?;
 
-                                    // Create batches
                                     let batch_server0 = FssKeyBatch {
                                         keys: keys0,
                                         random_values: random_pairs.iter().map(|(r0, _)| *r0).collect(),
@@ -423,15 +406,11 @@ impl FssDealer {
                                         random_values: random_pairs.iter().map(|(_, r1)| *r1).collect(),
                                     };
 
-                                    // Send to server 0 on this channel
                                     self.write_threshold_key_batch(&mut *threshold_channel_server0, &batch_server0)
                                         .map_err(|e| format!("Failed to send threshold keys to server 0 on channel {}: {}", channel_idx, e))?;
 
-                                    // Send to server 1 on this channel
                                     self.write_threshold_key_batch(&mut *threshold_channel_server1, &batch_server1)
                                         .map_err(|e| format!("Failed to send threshold keys to server 1 on channel {}: {}", channel_idx, e))?;
-
-                                    threshold_keys = self.generate_fss_keys_for_threshold().map_err(|e| format!("Failed to generate threshold keys: {}", e))?;
                                 }
                                 DealerSignal::Shutdown => {
                                     println!("Dealer: Received shutdown signal on channel {}, terminating this thread", channel_idx);
