@@ -9,7 +9,7 @@
     "h2": 6,
     "h3": 18,
     "d": 2,
-    "share_method": "OKVS",
+    "share_method": "FSS",
     "dictionary_type": "Unknown",
     "check_property": "MuBounded",
     "distance_metric": "L2",
