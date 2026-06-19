@@ -375,40 +375,21 @@ impl FssDealer {
         &self,
         signal_channels_server0: &mut [CommTrackingChannel],
         signal_channels_server1: &mut [CommTrackingChannel],
-        check_channels_server0: &mut [CommTrackingChannel],
-        check_channels_server1: &mut [CommTrackingChannel],
-        threshold_channels_server0: &mut [CommTrackingChannel],
-        threshold_channels_server1: &mut [CommTrackingChannel],
         check_key_mode: CheckKeyMode,
     ) -> Result<(), String> {
         println!(
             "FSS Dealer starting with {} channels per server...",
-            check_channels_server0.len()
+            signal_channels_server0.len()
         );
-
-        if check_channels_server0.len() != check_channels_server1.len() {
-            return Err(format!(
-                "Mismatch in channel count: server0 has {}, server1 has {}",
-                check_channels_server0.len(),
-                check_channels_server1.len()
-            ));
-        }
-        if threshold_channels_server0.len() != threshold_channels_server1.len() {
-            return Err(format!(
-                "Mismatch in threshold channel count: server0 has {}, server1 has {}",
-                threshold_channels_server0.len(),
-                threshold_channels_server1.len()
-            ));
-        }
 
         println!("Dealer ready");
 
         // Process each channel pair in parallel - each gets its own persistent thread
-        (signal_channels_server0.par_iter_mut().zip(signal_channels_server1.par_iter_mut()))
-            .zip(check_channels_server0.par_iter_mut().zip(check_channels_server1.par_iter_mut()))
-            .zip(threshold_channels_server0.par_iter_mut().zip(threshold_channels_server1.par_iter_mut()))
+        signal_channels_server0
+            .par_iter_mut()
+            .zip(signal_channels_server1.par_iter_mut())
             .enumerate()
-            .try_for_each(|(channel_idx, (((signal_channel_server0, signal_channel_server1), (check_channel_server0, check_channel_server1)), (threshold_channel_server0, threshold_channel_server1)))| {
+            .try_for_each(|(channel_idx, (signal_channel_server0, signal_channel_server1))| {
                 let mut equality_keys: Option<(
                     Vec<SerializedDpfKey>,
                     Vec<SerializedDpfKey>,

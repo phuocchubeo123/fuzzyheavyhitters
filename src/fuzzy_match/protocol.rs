@@ -274,8 +274,6 @@ impl MosaicProtocol {
         client_shares: &[SharedRange],
         query_points: &[Vec<u128>],
         signal_dealer_channels: &mut [CommTrackingChannel],
-        check_dealer_channels: &mut [CommTrackingChannel],
-        threshold_dealer_channels: &mut [CommTrackingChannel],
         other_server_channels: &mut [CommTrackingChannel],
     ) -> Result<Vec<bool>, String> {
         // Convert query points from u128 to Vec<Vec<bool>>
@@ -309,15 +307,13 @@ impl MosaicProtocol {
 
         // Use parallel batch processing with both dealer and server channels
         println!(
-            "Using full parallel processing with {} check dealer channels and {} server channels",
-            check_dealer_channels.len(),
+            "Using full parallel processing with {} signal dealer channels and {} server channels",
+            signal_dealer_channels.len(),
             other_server_channels.len()
         );
         let final_results = self.batch_check(
             &evals,
             signal_dealer_channels,
-            check_dealer_channels,
-            threshold_dealer_channels,
             other_server_channels,
         )?;
 
@@ -334,8 +330,6 @@ impl MosaicProtocol {
         &self,
         client_shares_list: &[SharedRange],
         signal_dealer_channels: &mut [CommTrackingChannel],
-        check_dealer_channels: &mut [CommTrackingChannel],
-        threshold_dealer_channels: &mut [CommTrackingChannel],
         other_server_channels: &mut [CommTrackingChannel],
     ) -> Result<Vec<Vec<u128>>, String> {
         if client_shares_list.is_empty() {
@@ -470,8 +464,6 @@ impl MosaicProtocol {
                 let exceeds_threshold_results = self.batch_check(
                     &new_eval,
                     signal_dealer_channels,
-                    check_dealer_channels,
-                    threshold_dealer_channels,
                     other_server_channels,
                 )?;
 
@@ -546,8 +538,6 @@ impl MosaicProtocol {
         &self,
         client_shares_list: &[SharedRange],
         signal_dealer_channels: &mut [CommTrackingChannel],
-        check_dealer_channels: &mut [CommTrackingChannel],
-        threshold_dealer_channels: &mut [CommTrackingChannel],
         other_server_channels: &mut [CommTrackingChannel],
     ) -> Result<Vec<Vec<u128>>, String> {
         if client_shares_list.is_empty() {
@@ -677,8 +667,6 @@ impl MosaicProtocol {
             let exceeds_threshold_results = self.batch_check(
                 &new_eval,
                 signal_dealer_channels,
-                check_dealer_channels,
-                threshold_dealer_channels,
                 other_server_channels,
             )?;
 
@@ -731,8 +719,6 @@ impl MosaicProtocol {
         &self,
         current_eval: &[Vec<Vec<u128>>],
         signal_dealer_channels: &mut [CommTrackingChannel],
-        check_dealer_channels: &mut [CommTrackingChannel],
-        threshold_dealer_channels: &mut [CommTrackingChannel],
         other_server_channels: &mut [CommTrackingChannel],
     ) -> Result<Vec<bool>, String> {
         let num_threads = other_server_channels.len();
@@ -774,10 +760,8 @@ impl MosaicProtocol {
             .par_chunks_mut(chunk_size)
             .zip(current_eval.par_chunks(chunk_size))
             .zip(signal_dealer_channels.par_iter_mut())
-            .zip(check_dealer_channels.par_iter_mut())
-            .zip(threshold_dealer_channels.par_iter_mut())
             .zip(other_server_channels.par_iter_mut())
-            .try_for_each(|(((((result_chunk, eval_chunk), signal_dealer_channel), check_dealer_channel), threshold_dealer_channel), other_server_channel)| {
+            .try_for_each(|(((result_chunk, eval_chunk), signal_dealer_channel), other_server_channel)| {
                 // Use the corresponding dealer channels for this thread
                 let mut local_rng = AesRng::new();
                 let mut aggregated_counts = Vec::new();
@@ -787,13 +771,13 @@ impl MosaicProtocol {
                 for eval in eval_chunk.iter() {
                     // Handle CheckData - get from dealer if using LpIntervalFSS, otherwise create locally
                     let check_data_list = match self.check_property() {
-                        CheckProperty::Equality => self.batch_check_receive_equality_check_data(signal_dealer_channel, check_dealer_channel)
+                        CheckProperty::Equality => self.batch_check_receive_equality_check_data(signal_dealer_channel)
                             .map_err(|e| format!("Failed to receive equality check data: {}", e))?,
                         CheckProperty::MuBounded => {
                             match self.check_method() {
                                 CheckMethod::FSS => {
                                     // Request check FSS keys from dealer using the parallel check dealer channel
-                                    let batch = request_dealer_check(signal_dealer_channel, check_dealer_channel, 1u128 << self.h3())?;
+                                    let batch = request_dealer_check(signal_dealer_channel, 1u128 << self.h3())?;
                                     // println!("Received dealer check keys");
 
                                     if batch.keys.len() < self.num_clients() {
@@ -848,9 +832,9 @@ impl MosaicProtocol {
                         vec![ThresholdData::GarbledCircuits { t: self.match_threshold() }; aggregated_counts.len()]
                     }
                     ThresholdMethod::FSS => {
-                        // Request threshold FSS keys from dealer using the parallel threshold dealer channel
+                        // Request threshold FSS keys from dealer using the signal dealer channel
                         let threshold_data_vec = (0..aggregated_counts.len()).map(|_| {
-                            let batch = request_dealer_threshold(signal_dealer_channel, threshold_dealer_channel, 2).unwrap();
+                            let batch = request_dealer_threshold(signal_dealer_channel, 2).unwrap();
                             if batch.keys.len() < 1 {
                                 panic!("Dealer provided {} keys but {} are needed", batch.keys.len(), 1);
                             }
@@ -971,12 +955,11 @@ impl MosaicProtocol {
     fn batch_check_receive_equality_check_data(
         &self,
         signal_dealer_channel: &mut CommTrackingChannel,
-        check_dealer_channel: &mut CommTrackingChannel,
     ) -> Result<Vec<CheckData>> {
         match self.check_method() {
             CheckMethod::FSS => {
                 let batch =
-                    request_dealer_equality(signal_dealer_channel, check_dealer_channel, 1u128 << self.h3())?;
+                    request_dealer_equality(signal_dealer_channel, 1u128 << self.h3())?;
 
                 ensure!(
                     batch.keys.len() >= self.num_clients(),
@@ -1154,7 +1137,6 @@ fn flatten_verify_values<'a>(
 /// Request FSS keys from dealer
 pub fn request_dealer_check(
     signal_dealer_channel: &mut CommTrackingChannel,
-    check_dealer_channel: &mut CommTrackingChannel,
     _modulus: u128,
 ) -> Result<SerializedFssKeyBatch, String> {
     // Send DealerSignal using custom serialization
@@ -1192,7 +1174,6 @@ pub fn request_dealer_check(
 
 pub fn request_dealer_equality(
     signal_dealer_channel: &mut CommTrackingChannel,
-    check_dealer_channel: &mut CommTrackingChannel,
     _modulus: u128,
 ) -> Result<SerializedDpfKeyBatch> {
     // Send DealerSignal using custom serialization
@@ -1228,7 +1209,6 @@ pub fn request_dealer_equality(
 
 pub fn request_dealer_threshold(
     signal_dealer_channel: &mut CommTrackingChannel,
-    threshold_dealer_channel: &mut CommTrackingChannel,
     _modulus: u128,
 ) -> Result<SerializedFssKeyBatch, String> {
     // Send DealerSignal using custom serialization

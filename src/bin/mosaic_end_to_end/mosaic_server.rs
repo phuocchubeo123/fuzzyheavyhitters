@@ -22,8 +22,6 @@ struct NetworkServerSetup {
     client_channel: CommTrackingChannel,
     other_server_channels: Vec<CommTrackingChannel>,
     signal_dealer_channels: Vec<CommTrackingChannel>,
-    check_dealer_channels: Vec<CommTrackingChannel>,
-    threshold_dealer_channels: Vec<CommTrackingChannel>,
 }
 
 fn send_ready_signal(client_channel: &mut CommTrackingChannel, server_id: u8) -> Result<(), String> {
@@ -98,24 +96,11 @@ fn setup_network_server(
         &server_addr,
         dealer_to_server_port,
     )?;
-    let check_dealer_channels = setup_parallel_channels(
-        false,
-        num_dealer_channels,
-        &server_addr,
-        dealer_to_server_port + num_dealer_channels as u16,
-    )?;
-    let threshold_dealer_channels = setup_parallel_channels(
-        false,
-        num_dealer_channels,
-        &server_addr,
-        dealer_to_server_port + 2 * num_dealer_channels as u16,
-    )?;
 
     println!(
-        "Server {}: Successfully established {} check dealer channels and {} threshold dealer channels",
+        "Server {}: Successfully established {} dealer channels",
         server_id,
-        check_dealer_channels.len(),
-        threshold_dealer_channels.len()
+        signal_dealer_channels.len(),
     );
 
     send_ready_signal(&mut client_channel, server_id)?;
@@ -124,8 +109,6 @@ fn setup_network_server(
         client_channel,
         other_server_channels,
         signal_dealer_channels,
-        check_dealer_channels,
-        threshold_dealer_channels,
     })
 }
 fn print_server_summary(
@@ -133,8 +116,6 @@ fn print_server_summary(
     protocol_time: std::time::Duration,
     other_server_channels: &[CommTrackingChannel],
     signal_dealer_channels: &[CommTrackingChannel],
-    check_dealer_channels: &[CommTrackingChannel],
-    threshold_dealer_channels: &[CommTrackingChannel],
 ) {
     let mut total_other_server_bytes_sent = 0;
     let mut total_other_server_bytes_received = 0;
@@ -148,16 +129,6 @@ fn print_server_summary(
     }
 
     for channel in signal_dealer_channels {
-        let (sent, received) = channel.get_communication_stats();
-        total_dealer_bytes_sent += sent;
-        total_dealer_bytes_received += received;
-    }
-    for channel in check_dealer_channels {
-        let (sent, received) = channel.get_communication_stats();
-        total_dealer_bytes_sent += sent;
-        total_dealer_bytes_received += received;
-    }
-    for channel in threshold_dealer_channels {
         let (sent, received) = channel.get_communication_stats();
         total_dealer_bytes_sent += sent;
         total_dealer_bytes_received += received;
@@ -237,8 +208,6 @@ fn run_server(config_path: &str, network_config_path: &str, method_config_path: 
         mut client_channel,
         mut other_server_channels,
         mut signal_dealer_channels,
-        mut check_dealer_channels,
-        mut threshold_dealer_channels,
     } = setup_network_server(network_config_path, is_server1, num_threads)?;
 
     // Create protocol configuration
@@ -353,8 +322,6 @@ fn run_server(config_path: &str, network_config_path: &str, method_config_path: 
             &shares,
             &query_points,
             &mut signal_dealer_channels,
-            &mut check_dealer_channels,
-            &mut threshold_dealer_channels,
             &mut other_server_channels,
         )?;
         println!("Server {}: Protocol execution completed", server_id);
@@ -374,8 +341,6 @@ fn run_server(config_path: &str, network_config_path: &str, method_config_path: 
         let heavy_hitters = protocol.run_server_unknown_dictionary_parallel2(
             &shares,
             &mut signal_dealer_channels,
-            &mut check_dealer_channels,
-            &mut threshold_dealer_channels,
             &mut other_server_channels,
         )?;
         println!("Server {}: Protocol execution completed", server_id);
@@ -392,8 +357,6 @@ fn run_server(config_path: &str, network_config_path: &str, method_config_path: 
         protocol_time,
         &other_server_channels,
         &signal_dealer_channels,
-        &check_dealer_channels,
-        &threshold_dealer_channels,
     );
 
     Ok(())

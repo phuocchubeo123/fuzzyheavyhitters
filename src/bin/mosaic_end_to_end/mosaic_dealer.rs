@@ -8,11 +8,7 @@ use mosaic::{
 
 struct NetworkDealerSetup {
     signal_channels_server0: Vec<CommTrackingChannel>,
-    check_channels_server0: Vec<CommTrackingChannel>,
-    threshold_channels_server0: Vec<CommTrackingChannel>,
     signal_channels_server1: Vec<CommTrackingChannel>,
-    check_channels_server1: Vec<CommTrackingChannel>,
-    threshold_channels_server1: Vec<CommTrackingChannel>,
 }
 
 fn setup_network_dealer(
@@ -32,36 +28,12 @@ fn setup_network_dealer(
         &network_config.server0_addr,
         network_config.dealer_to_server0_port,
     )?;
-    let check_channels_server0 = setup_parallel_channels(
-        true,
-        num_channels,
-        &network_config.server0_addr,
-        network_config.dealer_to_server0_port + num_channels as u16,
-    )?;
-    let threshold_channels_server0 = setup_parallel_channels(
-        true,
-        num_channels,
-        &network_config.server0_addr,
-        network_config.dealer_to_server0_port + 2 * num_channels as u16,
-    )?;
 
     let signal_channels_server1 = setup_parallel_channels(
         true,
         num_channels,
         &network_config.server1_addr,
         network_config.dealer_to_server1_port,
-    )?;
-    let check_channels_server1 = setup_parallel_channels(
-        true,
-        num_channels,
-        &network_config.server1_addr,
-        network_config.dealer_to_server1_port + num_channels as u16,
-    )?;
-    let threshold_channels_server1 = setup_parallel_channels(
-        true,
-        num_channels,
-        &network_config.server1_addr,
-        network_config.dealer_to_server1_port + 2 * num_channels as u16,
     )?;
 
     println!(
@@ -71,11 +43,7 @@ fn setup_network_dealer(
 
     Ok(NetworkDealerSetup {
         signal_channels_server0,
-        check_channels_server0,
-        threshold_channels_server0,
         signal_channels_server1,
-        check_channels_server1,
-        threshold_channels_server1,
     })
 }
 
@@ -86,10 +54,6 @@ fn print_dealer_summary(
     total_time: std::time::Duration,
     signal_channels_server0: &[CommTrackingChannel],
     signal_channels_server1: &[CommTrackingChannel],
-    check_channels_server0: &[CommTrackingChannel],
-    check_channels_server1: &[CommTrackingChannel],
-    threshold_channels_server0: &[CommTrackingChannel],
-    threshold_channels_server1: &[CommTrackingChannel],
 ) {
     let mut total_bytes_sent_0 = 0;
     let mut total_bytes_received_0 = 0;
@@ -108,29 +72,6 @@ fn print_dealer_summary(
         total_bytes_received_1 += received;
     }
 
-    for channel in check_channels_server0 {
-        let (sent, received) = channel.get_communication_stats();
-        total_bytes_sent_0 += sent;
-        total_bytes_received_0 += received;
-    }
-
-    for channel in check_channels_server1 {
-        let (sent, received) = channel.get_communication_stats();
-        total_bytes_sent_1 += sent;
-        total_bytes_received_1 += received;
-    }
-
-    for channel in threshold_channels_server0 {
-        let (sent, received) = channel.get_communication_stats();
-        total_bytes_sent_0 += sent;
-        total_bytes_received_0 += received;
-    }
-
-    for channel in threshold_channels_server1 {
-        let (sent, received) = channel.get_communication_stats();
-        total_bytes_sent_1 += sent;
-        total_bytes_received_1 += received;
-    }
 
     let total_bytes =
         total_bytes_sent_0 + total_bytes_received_0 + total_bytes_sent_1 + total_bytes_received_1;
@@ -220,10 +161,6 @@ fn run_dealer(config_path: &str, network_config_path: &str, num_threads: usize) 
         .run_dealer_parallel(
             &mut network.signal_channels_server0,
             &mut network.signal_channels_server1,
-            &mut network.check_channels_server0,
-            &mut network.check_channels_server1,
-            &mut network.threshold_channels_server0,
-            &mut network.threshold_channels_server1,
             check_key_mode,
         )
         .map_err(|e| format!("Failed to run parallel dealer protocol: {}", e))?;
@@ -237,10 +174,6 @@ fn run_dealer(config_path: &str, network_config_path: &str, num_threads: usize) 
         total_time,
         &network.signal_channels_server0,
         &network.signal_channels_server1,
-        &network.check_channels_server0,
-        &network.check_channels_server1,
-        &network.threshold_channels_server0,
-        &network.threshold_channels_server1,
     );
 
     Ok(())
