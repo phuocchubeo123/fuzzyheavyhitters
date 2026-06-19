@@ -8,7 +8,7 @@ use crate::{
     data_structures::modp::{Modp, BarrettCtx},
     configs::{cli_config::ProtocolParameters, method_config::MethodConfig},
     fuzzy_match::{
-        dealer::{DealerSignal, DpfKeyBatch, FssKeyBatch, SerializedFssKeyBatch},
+        dealer::{DealerSignal, SerializedDpfKeyBatch, SerializedFssKeyBatch},
         share_phase::SharePhase,
         share_phase_types::{DistanceMetric, ShareMethod},
         shared_range::{ShareData, SharedRange},
@@ -1193,8 +1193,8 @@ pub fn request_dealer_check(
 pub fn request_dealer_equality(
     signal_dealer_channel: &mut CommTrackingChannel,
     check_dealer_channel: &mut CommTrackingChannel,
-    modulus: u128,
-) -> Result<DpfKeyBatch> {
+    _modulus: u128,
+) -> Result<SerializedDpfKeyBatch> {
     // Send DealerSignal using custom serialization
     let signal = DealerSignal::RequestEqualityKeys;
     let signal_bytes = signal.to_bytes();
@@ -1221,17 +1221,16 @@ pub fn request_dealer_equality(
         .read_bytes(&mut batch_data)
         .map_err(|e| anyhow!("Failed to read key batch data: {}", e))?;
 
-    // Use output modulus from threshold config for deserialization
-    let (fss_key_batch, _) = DpfKeyBatch::from_bytes(&batch_data, modulus)
-        .map_err(|e| anyhow!("Failed to deserialize DpfKeyBatch for equality testing from dealer: {}", e))?;
+    let (fss_key_batch, _) = SerializedDpfKeyBatch::from_bytes(&batch_data)
+        .map_err(|e| anyhow!("Failed to deserialize SerializedDpfKeyBatch for equality testing from dealer: {}", e))?;
     Ok(fss_key_batch)
 }
 
 pub fn request_dealer_threshold(
     signal_dealer_channel: &mut CommTrackingChannel,
     threshold_dealer_channel: &mut CommTrackingChannel,
-    modulus: u128,
-) -> Result<FssKeyBatch, String> {
+    _modulus: u128,
+) -> Result<SerializedFssKeyBatch, String> {
     // Send DealerSignal using custom serialization
     let signal = DealerSignal::RequestThresholdKeys;
     let signal_bytes = signal.to_bytes();
@@ -1258,10 +1257,9 @@ pub fn request_dealer_threshold(
         .read_bytes(&mut batch_data)
         .map_err(|e| format!("Failed to read key batch data: {}", e))?;
 
-    // Deserialize threshold keys immediately, as before
     let (fss_key_batch, _) =
-        FssKeyBatch::from_bytes(&batch_data, modulus)
-            .map_err(|e| format!("Failed to deserialize FssKeyBatch for threshold testing from dealer: {}", e))?;
+        SerializedFssKeyBatch::from_bytes(&batch_data)
+            .map_err(|e| format!("Failed to deserialize SerializedFssKeyBatch for threshold testing from dealer: {}", e))?;
     Ok(fss_key_batch)
 }
 

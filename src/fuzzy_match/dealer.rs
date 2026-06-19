@@ -18,6 +18,74 @@ use rayon::prelude::*;
 use scuttlebutt::AbstractChannel;
 use std::convert::TryInto;
 
+/// Serialized DPF key batch for equality check phase.
+pub type SerializedDpfKey = Vec<u8>;
+
+#[derive(Clone, Debug)]
+pub struct SerializedDpfKeyBatch {
+    pub keys: Vec<SerializedDpfKey>,
+    pub random_values: Vec<Vec<bool>>,
+}
+
+impl SerializedDpfKeyBatch {
+    pub fn to_bytes(&self) -> Result<Vec<u8>, String> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&(self.keys.len() as u32).to_le_bytes());
+        for key in &self.keys {
+            out.extend_from_slice(&(key.len() as u32).to_le_bytes());
+            out.extend_from_slice(key);
+        }
+        out.extend_from_slice(&(self.random_values.len() as u32).to_le_bytes());
+        out.extend_from_slice(&(self.random_values[0].len() as u32).to_le_bytes());
+        for v in &self.random_values {
+            out.extend_from_slice(&bits_to_u8s(v));
+        }
+        Ok(out)
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<(Self, usize), String> {
+        if bytes.len() < 4 {
+            return Err("Too short for SerializedDpfKeyBatch keys len".to_string());
+        }
+        let mut offset = 0;
+        let key_count = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+        offset += 4;
+        let mut keys = Vec::with_capacity(key_count);
+        for _ in 0..key_count {
+            if bytes[offset..].len() < 4 {
+                return Err("Too short for serialized DPF key length".to_string());
+            }
+            let key_len = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+            offset += 4;
+            if bytes[offset..].len() < key_len {
+                return Err("Too short for serialized DPF key bytes".to_string());
+            }
+            keys.push(bytes[offset..offset + key_len].to_vec());
+            offset += key_len;
+        }
+        if bytes[offset..].len() < 8 {
+            return Err("Too short for SerializedDpfKeyBatch random_values header".to_string());
+        }
+        let val_count = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+        offset += 4;
+        let val_length = u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize;
+        offset += 4;
+        let val_bytes_length = (val_length + 7) / 8;
+        let mut random_values = Vec::with_capacity(val_count);
+        for _ in 0..val_count {
+            if bytes[offset..].len() < val_bytes_length {
+                return Err("Too short for serialized DPF random value bytes".to_string());
+            }
+            random_values.push(u8s_to_bits(
+                bytes[offset..offset + val_bytes_length].try_into().unwrap(),
+                val_length,
+            ));
+            offset += val_bytes_length;
+        }
+        Ok((SerializedDpfKeyBatch { keys, random_values }, offset))
+    }
+}
+
 /// FSS key batch for check phase - contains serialized keys for one server
 pub type SerializedFssKey = (Vec<u8>, Vec<u8>);
 
@@ -334,6 +402,12 @@ impl FssDealer {
             .zip(threshold_channels_server0.par_iter_mut().zip(threshold_channels_server1.par_iter_mut()))
             .enumerate()
             .try_for_each(|(channel_idx, (((signal_channel_server0, signal_channel_server1), (check_channel_server0, check_channel_server1)), (threshold_channel_server0, threshold_channel_server1)))| {
+                let mut equality_keys = self.generate_fss_keys_for_equality()
+                    .map_err(|e| format!("Failed to pre-generate equality keys: {}", e))?;
+                let mut check_keys = self.generate_fss_keys_for_check()
+                    .map_err(|e| format!("Failed to pre-generate check keys: {}", e))?;
+                let mut threshold_keys = self.generate_fss_keys_for_threshold()
+                    .map_err(|e| format!("Failed to pre-generate threshold keys: {}", e))?;
                 // Each channel pair runs in its own persistent loop
                 loop {
                     let server0_signal = self.read_dealer_signal(&mut *signal_channel_server0);
@@ -350,16 +424,15 @@ impl FssDealer {
                         Ok(signal) => {
                             match signal {
                                 DealerSignal::RequestEqualityKeys => {
-                                    let (keys0, keys1, random_pairs) = self
-                                        .generate_fss_keys_for_equality()
-                                        .map_err(|e| format!("Failed to generate equality keys: {}", e))?;
+                                    let current_keys = std::mem::take(&mut equality_keys);
+                                    let (keys0, keys1, random_pairs) = current_keys;
 
-                                    let batch_server0 = DpfKeyBatch {
+                                    let batch_server0 = SerializedDpfKeyBatch {
                                         keys: keys0,
                                         random_values: random_pairs.iter().map(|(r0, _)| r0.clone()).collect(),
                                     };
 
-                                    let batch_server1 = DpfKeyBatch {
+                                    let batch_server1 = SerializedDpfKeyBatch {
                                         keys: keys1,
                                         random_values: random_pairs.iter().map(|(_, r1)| r1.clone()).collect(),
                                     };
@@ -369,11 +442,16 @@ impl FssDealer {
 
                                     self.write_equality_key_batch(&mut *check_channel_server1, &batch_server1)
                                         .map_err(|e| format!("Failed to send keys to server 1 on channel {}: {}", channel_idx, e))?;
+
+                                    self.fill_fss_keys_for_equality(
+                                        &mut equality_keys.0,
+                                        &mut equality_keys.1,
+                                        &mut equality_keys.2,
+                                    ).map_err(|e| format!("Failed to generate next equality keys: {}", e))?;
                                 }
                                 DealerSignal::RequestCheckKeys => {
-                                    let (keys0, keys1, random_pairs) = self
-                                        .generate_fss_keys_for_check()
-                                        .map_err(|e| format!("Failed to generate check keys: {}", e))?;
+                                    let current_keys = std::mem::take(&mut check_keys);
+                                    let (keys0, keys1, random_pairs) = current_keys;
 
                                     let batch_server0 = SerializedFssKeyBatch {
                                         keys: keys0,
@@ -390,18 +468,23 @@ impl FssDealer {
 
                                     self.write_check_key_batch(&mut *check_channel_server1, &batch_server1)
                                         .map_err(|e| format!("Failed to send keys to server 1 on channel {}: {}", channel_idx, e))?;
+
+                                    self.fill_fss_keys_for_check(
+                                        &mut check_keys.0,
+                                        &mut check_keys.1,
+                                        &mut check_keys.2,
+                                    ).map_err(|e| format!("Failed to generate next check keys: {}", e))?;
                                 }
                                 DealerSignal::RequestThresholdKeys => {
-                                    let (keys0, keys1, random_pairs) = self
-                                        .generate_fss_keys_for_threshold()
-                                        .map_err(|e| format!("Failed to generate threshold keys: {}", e))?;
+                                    let current_keys = std::mem::take(&mut threshold_keys);
+                                    let (keys0, keys1, random_pairs) = current_keys;
 
-                                    let batch_server0 = FssKeyBatch {
+                                    let batch_server0 = SerializedFssKeyBatch {
                                         keys: keys0,
                                         random_values: random_pairs.iter().map(|(r0, _)| *r0).collect(),
                                     };
 
-                                    let batch_server1 = FssKeyBatch {
+                                    let batch_server1 = SerializedFssKeyBatch {
                                         keys: keys1,
                                         random_values: random_pairs.iter().map(|(_, r1)| *r1).collect(),
                                     };
@@ -411,6 +494,12 @@ impl FssDealer {
 
                                     self.write_threshold_key_batch(&mut *threshold_channel_server1, &batch_server1)
                                         .map_err(|e| format!("Failed to send threshold keys to server 1 on channel {}: {}", channel_idx, e))?;
+
+                                    self.fill_fss_keys_for_threshold(
+                                        &mut threshold_keys.0,
+                                        &mut threshold_keys.1,
+                                        &mut threshold_keys.2,
+                                    ).map_err(|e| format!("Failed to generate next threshold keys: {}", e))?;
                                 }
                                 DealerSignal::Shutdown => {
                                     println!("Dealer: Received shutdown signal on channel {}, terminating this thread", channel_idx);
@@ -456,7 +545,7 @@ impl FssDealer {
     pub fn write_equality_key_batch(
         &self,
         channel: &mut CommTrackingChannel,
-        batch: &DpfKeyBatch,
+        batch: &SerializedDpfKeyBatch,
     ) -> Result<(), String> {
         let data = batch
             .to_bytes()
@@ -501,7 +590,7 @@ impl FssDealer {
     pub fn write_threshold_key_batch(
         &self,
         channel: &mut CommTrackingChannel,
-        batch: &FssKeyBatch,
+        batch: &SerializedFssKeyBatch,
     ) -> Result<(), String> {
         let data = batch.to_bytes()?;
         let len_bytes = (data.len() as u64).to_le_bytes();
@@ -518,26 +607,32 @@ impl FssDealer {
         Ok(())
     }
 
-    pub fn generate_fss_keys_for_equality(
+    fn fill_fss_keys_for_equality(
         &self,
-    ) -> Result<(Vec<DpfKey>, Vec<DpfKey>, Vec<(Vec<bool>, Vec<bool>)>), String> {
+        key0s: &mut Vec<SerializedDpfKey>,
+        key1s: &mut Vec<SerializedDpfKey>,
+        random_pairs: &mut Vec<(Vec<bool>, Vec<bool>)>,
+    ) -> Result<(), String> {
         let out_modulus = 1u128 << self.check_output_bit_length;
 
-        let mut random_pairs = Vec::new();
-
-        for _ in 0..self.n_clients {
-            // Generate random pair (r0, r1) for this check using standard rand
+        random_pairs.clear();
+        random_pairs.resize(self.n_clients, (Vec::new(), Vec::new()));
+        for idx in 0..self.n_clients {
             let r0 = (0..self.check_input_bit_length * self.dimensions)
                 .map(|_| rand::rng().random::<bool>())
                 .collect::<Vec<_>>();
             let r1 = (0..self.check_input_bit_length * self.dimensions)
                 .map(|_| rand::rng().random::<bool>())
                 .collect::<Vec<_>>();
-            random_pairs.push((r0, r1));
+            random_pairs[idx] = (r0, r1);
         }
 
-        let mut key_pairs: Vec<(DpfKey, DpfKey)> = Vec::with_capacity(random_pairs.len());
-        for (r0, r1) in random_pairs.iter() {
+        key0s.clear();
+        key1s.clear();
+        key0s.resize_with(self.n_clients, Vec::new);
+        key1s.resize_with(self.n_clients, Vec::new);
+
+        for (idx, (r0, r1)) in random_pairs.iter().enumerate() {
             let sum_bits = r0
                 .iter()
                 .zip(r1.iter())
@@ -548,12 +643,108 @@ impl FssDealer {
             let zero = RingVec::new(vec![0], out_modulus)
                 .map_err(|e| format!("Failed to build zero payload: {}", e))?;
             let (key0, key1) = DpfKey::gen_dpf_key(&sum_bits, &one, &zero, out_modulus)
-                .map_err(|e| format!("Failed to generate DPF key: {}", e))?; // 1 if equal, 0 if not
-            key_pairs.push((key0, key1));
+                .map_err(|e| format!("Failed to generate DPF key: {}", e))?;
+            key0s[idx] = key0.to_bytes().map_err(|e| format!("Failed to serialize DPF key: {}", e))?;
+            key1s[idx] = key1.to_bytes().map_err(|e| format!("Failed to serialize DPF key: {}", e))?;
         }
 
-        let (key0s, key1s) = key_pairs.into_iter().unzip();
+        Ok(())
+    }
+
+    pub fn generate_fss_keys_for_equality(
+        &self,
+    ) -> Result<(Vec<SerializedDpfKey>, Vec<SerializedDpfKey>, Vec<(Vec<bool>, Vec<bool>)>), String> {
+        let mut key0s = Vec::new();
+        let mut key1s = Vec::new();
+        let mut random_pairs = Vec::new();
+        self.fill_fss_keys_for_equality(&mut key0s, &mut key1s, &mut random_pairs)?;
         Ok((key0s, key1s, random_pairs))
+    }
+
+    /// Fill preallocated buffers with FSS keys for check phase comparison (Lp distance with IntervalFSS)
+    fn fill_fss_keys_for_check(
+        &self,
+        key0s: &mut Vec<SerializedFssKey>,
+        key1s: &mut Vec<SerializedFssKey>,
+        random_pairs: &mut Vec<(u128, u128)>,
+    ) -> Result<(), String> {
+        let in_modulus = 1u128 << self.check_input_bit_length;
+        let out_modulus = 1u128 << self.check_output_bit_length;
+
+        random_pairs.clear();
+        random_pairs.resize(self.n_clients, (0u128, 0u128));
+        for idx in 0..self.n_clients {
+            let mut std_rng = rand::rng();
+            random_pairs[idx] = (
+                std_rng.random_range(0..in_modulus),
+                std_rng.random_range(0..in_modulus),
+            );
+        }
+
+        key0s.clear();
+        key1s.clear();
+        key0s.resize_with(self.n_clients, || (Vec::new(), Vec::new()));
+        key1s.resize_with(self.n_clients, || (Vec::new(), Vec::new()));
+
+        for (idx, &(r0, r1)) in random_pairs.iter().enumerate() {
+            let sum = self.distance_threshold + (r0 + r1) % in_modulus;
+            let wraps_around = sum >= in_modulus;
+            let zero_payload = RingVec::new(vec![0], out_modulus).expect("Failed to create zero payload");
+            let one_payload = RingVec::new(vec![1], out_modulus).expect("Failed to create one payload");
+            if wraps_around {
+                let interval_start = (sum + 1) % in_modulus;
+                let interval_end = (r0 + r1 - 1) % in_modulus;
+                let alpha_bits = u128_to_bits_msb(interval_start, self.check_input_bit_length);
+                let beta_bits = u128_to_bits_msb(interval_end, self.check_input_bit_length);
+                let (key00, key10) = LdcfKey::gen_ldcf_key(
+                    &alpha_bits,
+                    &one_payload,
+                    &zero_payload,
+                    out_modulus,
+                ).map_err(|e| e.to_string())?;
+                let (key01, key11) = RdcfKey::gen_rdcf_key(
+                    &beta_bits,
+                    &zero_payload,
+                    &one_payload,
+                    out_modulus,
+                ).map_err(|e| e.to_string())?;
+                key0s[idx] = (
+                    key00.to_bytes().map_err(|e| e.to_string())?,
+                    key01.to_bytes().map_err(|e| e.to_string())?,
+                );
+                key1s[idx] = (
+                    key10.to_bytes().map_err(|e| e.to_string())?,
+                    key11.to_bytes().map_err(|e| e.to_string())?,
+                );
+            } else {
+                let interval_start = (r0 + r1) % in_modulus;
+                let interval_end = sum;
+                let alpha_bits = u128_to_bits_msb(interval_start, self.check_input_bit_length);
+                let beta_bits = u128_to_bits_msb(interval_end, self.check_input_bit_length);
+                let (key00, key10) = LdcfKey::gen_ldcf_key(
+                    &alpha_bits,
+                    &zero_payload,
+                    &one_payload,
+                    out_modulus,
+                ).map_err(|e| e.to_string())?;
+                let (key01, key11) = RdcfKey::gen_rdcf_key(
+                    &beta_bits,
+                    &zero_payload,
+                    &(zero_payload.clone() - one_payload.clone()),
+                    out_modulus,
+                ).map_err(|e| e.to_string())?;
+                key0s[idx] = (
+                    key00.to_bytes().map_err(|e| e.to_string())?,
+                    key01.to_bytes().map_err(|e| e.to_string())?,
+                );
+                key1s[idx] = (
+                    key10.to_bytes().map_err(|e| e.to_string())?,
+                    key11.to_bytes().map_err(|e| e.to_string())?,
+                );
+            }
+        }
+
+        Ok(())
     }
 
     /// Generate FSS keys for check phase comparison (Lp distance with IntervalFSS)
@@ -568,97 +759,80 @@ impl FssDealer {
         ),
         String,
     > {
-        let in_modulus = 1u128 << self.check_input_bit_length;
-        let out_modulus = 1u128 << self.check_output_bit_length;
-
+        let mut key0s = Vec::new();
+        let mut key1s = Vec::new();
         let mut random_pairs = Vec::new();
-
-        for _ in 0..self.n_clients {
-            // Generate random pair (r0, r1) for this check using standard rand
-            let mut std_rng = rand::rng();
-            let r0 = std_rng.random_range(0..in_modulus);
-            let r1 = std_rng.random_range(0..in_modulus);
-            random_pairs.push((r0, r1));
-        }
-
-        // Generate FSS keys (sequential for clarity with error handling)
-        let mut key_pairs: Vec<(SerializedFssKey, SerializedFssKey)> =
-            Vec::with_capacity(random_pairs.len());
-        for &(r0, r1) in random_pairs.iter() {
-            // Check if distance_threshold + r0 + r1 would wrap around
-            let sum = self.distance_threshold + (r0 + r1) % in_modulus;
-            let wraps_around = sum >= in_modulus;
-            let zero_payload =
-                RingVec::new(vec![0], out_modulus).expect("Failed to create zero payload");
-            let one_payload =
-                RingVec::new(vec![1], out_modulus).expect("Failed to create one payload");
-            if wraps_around {
-                // Wrap-around case: interval [distance_threshold+r0+r1 mod modulus, r0+r1]
-                // Return 0 in the middle, 1 on left and right
-                let interval_start = (sum + 1) % in_modulus;
-                let interval_end = (r0 + r1 - 1) % in_modulus;
-
-                let alpha_bits = u128_to_bits_msb(interval_start, self.check_input_bit_length);
-                let beta_bits = u128_to_bits_msb(interval_end, self.check_input_bit_length);
-
-                let (key00, key10) = LdcfKey::gen_ldcf_key(
-                    &alpha_bits,
-                    &one_payload,
-                    &zero_payload,
-                    out_modulus,
-                )
-                .map_err(|e| e.to_string())?;
-
-                let (key01, key11) = RdcfKey::gen_rdcf_key(
-                    &beta_bits,
-                    &zero_payload,
-                    &one_payload,
-                    out_modulus,
-                )
-                .map_err(|e| e.to_string())?;
-
-                let key00 = key00.to_bytes().map_err(|e| e.to_string())?;
-                let key01 = key01.to_bytes().map_err(|e| e.to_string())?;
-                let key10 = key10.to_bytes().map_err(|e| e.to_string())?;
-                let key11 = key11.to_bytes().map_err(|e| e.to_string())?;
-
-                key_pairs.push(((key00, key01), (key10, key11)));
-            } else {
-                // No wrap-around case: interval [r0+r1, distance_threshold+r0+r1]
-                // Return 1 inside interval (distance <= threshold), 0 outside
-                let interval_start = (r0 + r1) % in_modulus;
-                let interval_end = sum;
-
-                let alpha_bits = u128_to_bits_msb(interval_start, self.check_input_bit_length);
-                let beta_bits = u128_to_bits_msb(interval_end, self.check_input_bit_length);
-
-                let (key00, key10) = LdcfKey::gen_ldcf_key(
-                    &alpha_bits,
-                    &zero_payload,
-                    &one_payload,
-                    out_modulus,
-                )
-                .map_err(|e| e.to_string())?;
-
-                let (key01, key11) = RdcfKey::gen_rdcf_key(
-                    &beta_bits,
-                    &zero_payload,
-                    &(zero_payload.clone() - one_payload.clone()),
-                    out_modulus,
-                )
-                .map_err(|e| e.to_string())?;
-
-                let key00 = key00.to_bytes().map_err(|e| e.to_string())?;
-                let key01 = key01.to_bytes().map_err(|e| e.to_string())?;
-                let key10 = key10.to_bytes().map_err(|e| e.to_string())?;
-                let key11 = key11.to_bytes().map_err(|e| e.to_string())?;
-
-                key_pairs.push(((key00, key01), (key10, key11)));
-            }
-        }
-
-        let (key0s, key1s) = key_pairs.into_iter().unzip();
+        self.fill_fss_keys_for_check(&mut key0s, &mut key1s, &mut random_pairs)?;
         Ok((key0s, key1s, random_pairs))
+    }
+
+    fn fill_fss_keys_for_threshold(
+        &self,
+        key0s: &mut Vec<SerializedFssKey>,
+        key1s: &mut Vec<SerializedFssKey>,
+        random_pairs: &mut Vec<(u128, u128)>,
+    ) -> Result<(), String> {
+        let modulus = 1u128 << self.check_output_bit_length;
+
+        random_pairs.clear();
+        random_pairs.resize(1, (0u128, 0u128));
+        let mut std_rng = rand::rng();
+        random_pairs[0] = (
+            std_rng.random_range(0..modulus),
+            std_rng.random_range(0..modulus),
+        );
+
+        key0s.clear();
+        key1s.clear();
+        key0s.resize_with(1, || (Vec::new(), Vec::new()));
+        key1s.resize_with(1, || (Vec::new(), Vec::new()));
+
+        let (r0, r1) = random_pairs[0];
+        let zero_payload = RingVec::new(vec![0], 2).expect("Failed to create zero payload");
+        let one_payload = RingVec::new(vec![1], 2).expect("Failed to create one payload");
+        let sum = self.count_threshold + (r0 + r1) % modulus;
+        if sum >= modulus {
+            let interval_start = sum % modulus;
+            let interval_end = (r0 + r1) % modulus;
+            let alpha_bits = u128_to_bits_msb(interval_start, self.check_output_bit_length);
+            let beta_bits = u128_to_bits_msb(interval_end, self.check_output_bit_length);
+            let (key00, key10) = LdcfKey::gen_ldcf_key(&alpha_bits, &zero_payload, &one_payload, 2)
+                .map_err(|e| e.to_string())?;
+            let (key01, key11) = RdcfKey::gen_rdcf_key(
+                &beta_bits,
+                &zero_payload,
+                &(zero_payload.clone() - one_payload.clone()),
+                2,
+            )
+            .map_err(|e| e.to_string())?;
+            key0s[0] = (
+                key00.to_bytes().map_err(|e| e.to_string())?,
+                key01.to_bytes().map_err(|e| e.to_string())?,
+            );
+            key1s[0] = (
+                key10.to_bytes().map_err(|e| e.to_string())?,
+                key11.to_bytes().map_err(|e| e.to_string())?,
+            );
+        } else {
+            let interval_start = (r0 + r1) % modulus;
+            let interval_end = (sum + modulus - 1) % modulus;
+            let alpha_bits = u128_to_bits_msb(interval_start, self.check_output_bit_length);
+            let beta_bits = u128_to_bits_msb(interval_end, self.check_output_bit_length);
+            let (key00, key10) = LdcfKey::gen_ldcf_key(&alpha_bits, &one_payload, &zero_payload, 2)
+                .map_err(|e| e.to_string())?;
+            let (key01, key11) = RdcfKey::gen_rdcf_key(&beta_bits, &zero_payload, &one_payload, 2)
+                .map_err(|e| e.to_string())?;
+            key0s[0] = (
+                key00.to_bytes().map_err(|e| e.to_string())?,
+                key01.to_bytes().map_err(|e| e.to_string())?,
+            );
+            key1s[0] = (
+                key10.to_bytes().map_err(|e| e.to_string())?,
+                key11.to_bytes().map_err(|e| e.to_string())?,
+            );
+        }
+
+        Ok(())
     }
 
     /// Generate FSS keys for interval FSS threshold comparison
@@ -667,66 +841,16 @@ impl FssDealer {
         &self,
     ) -> Result<
         (
-            Vec<(LdcfKey, RdcfKey)>,
-            Vec<(LdcfKey, RdcfKey)>,
+            Vec<SerializedFssKey>,
+            Vec<SerializedFssKey>,
             Vec<(u128, u128)>,
         ),
         String,
     > {
-        let modulus = 1u128 << self.check_output_bit_length;
+        let mut key0s = Vec::new();
+        let mut key1s = Vec::new();
         let mut random_pairs = Vec::new();
-
-        // Generate random pair (r0, r1) for this query using standard rand
-        let mut std_rng = rand::rng();
-        let r0 = std_rng.random_range(0..modulus);
-        let r1 = std_rng.random_range(0..modulus);
-        random_pairs.push((r0, r1));
-
-        let zero_payload = RingVec::new(vec![0], 2).expect("Failed to create zero payload");
-        let one_payload = RingVec::new(vec![1], 2).expect("Failed to create one payload");
-
-        // Check if count_threshold + r0 + r1 would wrap around
-        let sum = self.count_threshold + (r0 + r1) % modulus;
-        if sum >= modulus {
-            // Wrap-around case: interval [threshold+r0+r1 mod modulus, r0+r1]
-            // Return 1 in the middle, 0 on left and right
-            let interval_start = sum % modulus;
-            let interval_end = (r0 + r1) % modulus;
-
-            let alpha_bits = u128_to_bits_msb(interval_start, self.check_output_bit_length);
-            let beta_bits = u128_to_bits_msb(interval_end, self.check_output_bit_length);
-
-            let (key00, key10) =
-                LdcfKey::gen_ldcf_key(&alpha_bits, &zero_payload, &one_payload, 2)
-                    .map_err(|e| e.to_string())?;
-
-            let (key01, key11) = RdcfKey::gen_rdcf_key(
-                &beta_bits,
-                &zero_payload,
-                &(zero_payload.clone() - one_payload.clone()),
-                2,
-            )
-            .map_err(|e| e.to_string())?;
-
-            Ok((vec![(key00, key01)], vec![(key10, key11)], random_pairs))
-        } else {
-            // No wrap-around case: interval [r0+r1, threshold+r0+r1]
-            // Return 1 on left and right, 0 in the middle
-            let interval_start = (r0 + r1) % modulus;
-            let interval_end = (sum + modulus - 1) % modulus;
-
-            let alpha_bits = u128_to_bits_msb(interval_start, self.check_output_bit_length);
-            let beta_bits = u128_to_bits_msb(interval_end, self.check_output_bit_length);
-
-            let (key00, key10) =
-                LdcfKey::gen_ldcf_key(&alpha_bits, &one_payload, &zero_payload, 2)
-                    .map_err(|e| e.to_string())?;
-
-            let (key01, key11) =
-                RdcfKey::gen_rdcf_key(&beta_bits, &zero_payload, &one_payload, 2)
-                    .map_err(|e| e.to_string())?;
-
-            Ok((vec![(key00, key01)], vec![(key10, key11)], random_pairs))
-        }
+        self.fill_fss_keys_for_threshold(&mut key0s, &mut key1s, &mut random_pairs)?;
+        Ok((key0s, key1s, random_pairs))
     }
 }

@@ -3,7 +3,7 @@ use crate::{
     data_structures::mod2k::Mod2k,
     fss::{dpf::DpfKey, ldcf::LdcfKey, rdcf::RdcfKey},
     fuzzy_match::{
-        dealer::SerializedFssKey,
+        dealer::{SerializedDpfKey, SerializedFssKey},
         share_phase::SharePhaseError,
         check_phase_types::{CheckConfig, CheckData, CheckMethod, CheckProperty, CheckPhaseError},
     },
@@ -183,7 +183,7 @@ impl CheckPhase {
     pub fn batch_equality_testing_fss(
         &self,
         inputs: &[Vec<bool>],
-        fss_keys: &[DpfKey],
+        fss_keys: &[SerializedDpfKey],
         random_values: &[Vec<bool>],
         channel: &mut CommTrackingChannel,
     ) -> Result<Vec<Mod2k>, CheckPhaseError> {
@@ -289,24 +289,24 @@ impl CheckPhase {
             })
             .collect::<Vec<Vec<bool>>>();
 
+        let out_modulus = 1u128 << self.config.h3;
         let result = combined_masked_values
             .iter()
             .zip(fss_keys.iter())
-            .map(|(masked_eval, fss_key)| {
+            .map(|(masked_eval, fss_key_bytes)| {
+                let (fss_key, _) = DpfKey::from_bytes(fss_key_bytes, out_modulus)
+                    .map_err(|e| CheckPhaseError::SharePhaseError(SharePhaseError::EvaluationError(e.to_string())))?;
                 let fss_result = fss_key
-                    .eval_dpf(masked_eval, 1u128 << self.config.h3)
+                    .eval_dpf(masked_eval, out_modulus)
                     .map_err(|e| {
                         CheckPhaseError::SharePhaseError(SharePhaseError::EvaluationError(
                             e.to_string(),
                         ))
                     })?;
                 let value = if self.role {
-                    Mod2k::new(
-                        (1u128 << self.config.h3) - fss_result[0],
-                        1u128 << self.config.h3,
-                    )
+                    Mod2k::new(out_modulus - fss_result[0], out_modulus)
                 } else {
-                    Mod2k::new(fss_result[0], 1u128 << self.config.h3)
+                    Mod2k::new(fss_result[0], out_modulus)
                 };
                 Ok(value)
             })

@@ -5,7 +5,7 @@ use mosaic::{
     configs::property_test_config::PropertyTestBenchmarkConfig,
     data_structures::mod2k::Mod2k,
     fuzzy_match::{
-        dealer::{FssDealer, FssKeyBatch},
+        dealer::{FssDealer, SerializedFssKeyBatch},
         protocol::request_dealer_threshold,
         threshold_phase::ThresholdPhase,
         threshold_phase_types::{ThresholdConfig, ThresholdData, ThresholdMethod},
@@ -58,11 +58,11 @@ fn run_dealer_benchmark(config_path: &str) -> Result<(), Box<dyn std::error::Err
             dealer.generate_fss_keys_for_threshold().unwrap();
         key_gen_time += start.elapsed().as_micros();
         let start_time = Instant::now();
-        let batch_server0 = FssKeyBatch {
+        let batch_server0 = SerializedFssKeyBatch {
             keys: server0_keys,
             random_values: random_pairs.iter().map(|(r0, _)| r0.clone()).collect(),
         };
-        let batch_server1 = FssKeyBatch {
+        let batch_server1 = SerializedFssKeyBatch {
             keys: server1_keys,
             random_values: random_pairs.iter().map(|(_, r1)| r1.clone()).collect(),
         };

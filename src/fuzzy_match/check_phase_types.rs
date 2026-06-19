@@ -1,7 +1,6 @@
 use crate::{
-    fss::dpf::DpfKey,
     fuzzy_match::{
-        dealer::SerializedFssKey,
+        dealer::{SerializedDpfKey, SerializedFssKey},
         share_phase::SharePhaseError,
     },
     configs::{cli_config::ProtocolParameters, method_config::MethodConfig},
@@ -25,7 +24,7 @@ pub enum CheckProperty {
 pub enum CheckData {
     LinfGarbledCircuits,
     LinfDpf {
-        fss_key: DpfKey,
+        fss_key: SerializedDpfKey,
         random_value: Vec<bool>,
     },
     /// Threshold value for Lp distance comparison with garbled circuits

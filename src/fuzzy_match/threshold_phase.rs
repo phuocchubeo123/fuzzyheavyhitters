@@ -6,6 +6,7 @@ use crate::{
         multiple_ev_greater_than_ss, multiple_gb_greater_than_ss,
     },
     fuzzy_match::{
+        dealer::SerializedFssKey,
         threshold_phase_types::{ThresholdConfig, ThresholdData, ThresholdMethod, ThresholdPhaseError},
     },
     util::u128_to_bits_msb,
@@ -78,7 +79,7 @@ impl ThresholdPhase {
         &self,
         match_results: &[Mod2k],
         random_values: &[Mod2k],
-        fss_keys: &[(LdcfKey, RdcfKey)],
+        fss_keys: &[SerializedFssKey],
         channel: &mut CommTrackingChannel,
     ) -> Result<Vec<bool>, ThresholdPhaseError> {
         let masked_values = match_results
@@ -146,7 +147,11 @@ impl ThresholdPhase {
         let threshold_exceeded = combined_masked_values
             .iter()
             .zip(fss_keys.iter())
-            .map(|(masked_value, (fss_key0, fss_key1))| -> Result<bool, ThresholdPhaseError> {
+            .map(|(masked_value, (fss_key0_bytes, fss_key1_bytes))| -> Result<bool, ThresholdPhaseError> {
+                let (fss_key0, _) = LdcfKey::from_bytes(fss_key0_bytes, out_modulus)
+                    .map_err(|e| ThresholdPhaseError::ConversionError(format!("Failed to deserialize LDCF key: {}", e)))?;
+                let (fss_key1, _) = RdcfKey::from_bytes(fss_key1_bytes, out_modulus)
+                    .map_err(|e| ThresholdPhaseError::ConversionError(format!("Failed to deserialize RDCF key: {}", e)))?;
                 let masked_value_bits = u128_to_bits_msb(masked_value.val(), self.config.h3);
                 let fss_result = fss_key0
                     .eval_ldcf(&masked_value_bits, out_modulus)

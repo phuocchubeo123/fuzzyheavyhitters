@@ -1,5 +1,5 @@
 use crate::{
-    fss::{ldcf::LdcfKey, rdcf::RdcfKey},
+    fuzzy_match::dealer::SerializedFssKey,
     configs::{cli_config::ProtocolParameters, method_config::MethodConfig},
 };
 
@@ -20,7 +20,7 @@ pub enum ThresholdData {
     /// FSS key and random value for IntervalFSS privacy
     IntervalFSS {
         /// FSS key for this server
-        fss_key: (LdcfKey, RdcfKey),
+        fss_key: SerializedFssKey,
         /// Random value for this server (r0 for server 0, r1 for server 1)
         random_value: u128,
     },
