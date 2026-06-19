@@ -310,6 +310,12 @@ pub enum DealerSignal {
     Shutdown,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckKeyMode {
+    Equality,
+    MuBounded,
+}
+
 impl DealerSignal {
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
@@ -373,6 +379,7 @@ impl FssDealer {
         check_channels_server1: &mut [CommTrackingChannel],
         threshold_channels_server0: &mut [CommTrackingChannel],
         threshold_channels_server1: &mut [CommTrackingChannel],
+        check_key_mode: CheckKeyMode,
     ) -> Result<(), String> {
         println!(
             "FSS Dealer starting with {} channels per server...",
@@ -402,10 +409,30 @@ impl FssDealer {
             .zip(threshold_channels_server0.par_iter_mut().zip(threshold_channels_server1.par_iter_mut()))
             .enumerate()
             .try_for_each(|(channel_idx, (((signal_channel_server0, signal_channel_server1), (check_channel_server0, check_channel_server1)), (threshold_channel_server0, threshold_channel_server1)))| {
-                let mut equality_keys = self.generate_fss_keys_for_equality()
-                    .map_err(|e| format!("Failed to pre-generate equality keys: {}", e))?;
-                let mut check_keys = self.generate_fss_keys_for_check()
-                    .map_err(|e| format!("Failed to pre-generate check keys: {}", e))?;
+                let mut equality_keys: Option<(
+                    Vec<SerializedDpfKey>,
+                    Vec<SerializedDpfKey>,
+                    Vec<(Vec<bool>, Vec<bool>)>,
+                )> = None;
+                let mut check_keys: Option<(
+                    Vec<SerializedFssKey>,
+                    Vec<SerializedFssKey>,
+                    Vec<(u128, u128)>,
+                )> = None;
+                match check_key_mode {
+                    CheckKeyMode::Equality => {
+                        equality_keys = Some(
+                            self.generate_fss_keys_for_equality()
+                                .map_err(|e| format!("Failed to pre-generate equality keys: {}", e))?,
+                        );
+                    }
+                    CheckKeyMode::MuBounded => {
+                        check_keys = Some(
+                            self.generate_fss_keys_for_check()
+                                .map_err(|e| format!("Failed to pre-generate check keys: {}", e))?,
+                        );
+                    }
+                }
                 let mut threshold_keys = self.generate_fss_keys_for_threshold()
                     .map_err(|e| format!("Failed to pre-generate threshold keys: {}", e))?;
                 // Each channel pair runs in its own persistent loop
@@ -424,17 +451,23 @@ impl FssDealer {
                         Ok(signal) => {
                             match signal {
                                 DealerSignal::RequestEqualityKeys => {
-                                    let current_keys = std::mem::take(&mut equality_keys);
-                                    let (keys0, keys1, random_pairs) = current_keys;
+                                    let mut current_keys = equality_keys
+                                        .take()
+                                        .ok_or_else(|| {
+                                            format!(
+                                                "Received equality key request on channel {} but dealer was configured for {:?}",
+                                                channel_idx, check_key_mode
+                                            )
+                                        })?;
 
                                     let batch_server0 = SerializedDpfKeyBatch {
-                                        keys: keys0,
-                                        random_values: random_pairs.iter().map(|(r0, _)| r0.clone()).collect(),
+                                        keys: std::mem::take(&mut current_keys.0),
+                                        random_values: current_keys.2.iter().map(|(r0, _)| r0.clone()).collect(),
                                     };
 
                                     let batch_server1 = SerializedDpfKeyBatch {
-                                        keys: keys1,
-                                        random_values: random_pairs.iter().map(|(_, r1)| r1.clone()).collect(),
+                                        keys: std::mem::take(&mut current_keys.1),
+                                        random_values: current_keys.2.iter().map(|(_, r1)| r1.clone()).collect(),
                                     };
 
                                     self.write_equality_key_batch(&mut *check_channel_server0, &batch_server0)
@@ -444,23 +477,30 @@ impl FssDealer {
                                         .map_err(|e| format!("Failed to send keys to server 1 on channel {}: {}", channel_idx, e))?;
 
                                     self.fill_fss_keys_for_equality(
-                                        &mut equality_keys.0,
-                                        &mut equality_keys.1,
-                                        &mut equality_keys.2,
+                                        &mut current_keys.0,
+                                        &mut current_keys.1,
+                                        &mut current_keys.2,
                                     ).map_err(|e| format!("Failed to generate next equality keys: {}", e))?;
+                                    equality_keys = Some(current_keys);
                                 }
                                 DealerSignal::RequestCheckKeys => {
-                                    let current_keys = std::mem::take(&mut check_keys);
-                                    let (keys0, keys1, random_pairs) = current_keys;
+                                    let mut current_keys = check_keys
+                                        .take()
+                                        .ok_or_else(|| {
+                                            format!(
+                                                "Received check key request on channel {} but dealer was configured for {:?}",
+                                                channel_idx, check_key_mode
+                                            )
+                                        })?;
 
                                     let batch_server0 = SerializedFssKeyBatch {
-                                        keys: keys0,
-                                        random_values: random_pairs.iter().map(|(r0, _)| *r0).collect(),
+                                        keys: std::mem::take(&mut current_keys.0),
+                                        random_values: current_keys.2.iter().map(|(r0, _)| *r0).collect(),
                                     };
 
                                     let batch_server1 = SerializedFssKeyBatch {
-                                        keys: keys1,
-                                        random_values: random_pairs.iter().map(|(_, r1)| *r1).collect(),
+                                        keys: std::mem::take(&mut current_keys.1),
+                                        random_values: current_keys.2.iter().map(|(_, r1)| *r1).collect(),
                                     };
 
                                     self.write_check_key_batch(&mut *check_channel_server0, &batch_server0)
@@ -470,10 +510,11 @@ impl FssDealer {
                                         .map_err(|e| format!("Failed to send keys to server 1 on channel {}: {}", channel_idx, e))?;
 
                                     self.fill_fss_keys_for_check(
-                                        &mut check_keys.0,
-                                        &mut check_keys.1,
-                                        &mut check_keys.2,
+                                        &mut current_keys.0,
+                                        &mut current_keys.1,
+                                        &mut current_keys.2,
                                     ).map_err(|e| format!("Failed to generate next check keys: {}", e))?;
+                                    check_keys = Some(current_keys);
                                 }
                                 DealerSignal::RequestThresholdKeys => {
                                     let current_keys = std::mem::take(&mut threshold_keys);

@@ -2,7 +2,7 @@ use clap::Parser;
 use mosaic::{
     channel::{setup_parallel_channels, CommTrackingChannel},
     configs::{cli_config::CliConfig, network_config::NetworkConfig},
-    fuzzy_match::dealer::FssDealer, util::get_distance_threshold,
+    fuzzy_match::dealer::{CheckKeyMode, FssDealer}, util::get_distance_threshold,
 };
 
 
@@ -204,6 +204,12 @@ fn run_dealer(config_path: &str, network_config_path: &str, num_threads: usize) 
         cli_config.protocol.d,
     );
 
+    let check_key_mode = match cli_config.protocol.check_property.as_str() {
+        "Equality" => CheckKeyMode::Equality,
+        "MuBounded" => CheckKeyMode::MuBounded,
+        other => return Err(format!("Unsupported check property: {}", other)),
+    };
+
     // Determine number of parallel channels (use specified num_threads or system parallelism)
     let num_channels = num_threads;
 
@@ -218,6 +224,7 @@ fn run_dealer(config_path: &str, network_config_path: &str, num_threads: usize) 
             &mut network.check_channels_server1,
             &mut network.threshold_channels_server0,
             &mut network.threshold_channels_server1,
+            check_key_mode,
         )
         .map_err(|e| format!("Failed to run parallel dealer protocol: {}", e))?;
     let dealer_time = dealer_start.elapsed();
